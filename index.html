@@ -1260,14 +1260,14 @@
       return candidates.slice(0, 24);
     }
 
-    function quickEvaluate(x, y) {
+    function quickEvaluate(x, y, player = WHITE) {
       let score = 0;
       
       // 即勝ち/即負けチェック
-      board[y][x] = WHITE;
-      if (checkWin(x, y, WHITE)) { board[y][x] = EMPTY; return 100000000; }
-      board[y][x] = BLACK;
-      if (checkWin(x, y, BLACK)) { board[y][x] = EMPTY; return 90000000; }
+      board[y][x] = player;
+      if (checkWin(x, y, player)) { board[y][x] = EMPTY; return 100000000; }
+      board[y][x] = -player;
+      if (checkWin(x, y, -player)) { board[y][x] = EMPTY; return 90000000; }
       board[y][x] = EMPTY;
 
       // 中央ボーナス
@@ -1281,7 +1281,7 @@
       const enemy = -player;
       const candidates = generateCandidates();
 
-      // 1. 即勝ち
+      // 即勝ち
       for (const { x, y } of candidates) {
         board[y][x] = player;
         const win = checkWin(x, y, player);
@@ -1289,7 +1289,7 @@
         if (win) return { x, y };
       }
 
-      // 2. 即負け防止
+      // 即負け防止
       for (const { x, y } of candidates) {
         board[y][x] = enemy;
         const lose = checkWin(x, y, enemy);
@@ -1297,83 +1297,7 @@
         if (lose) return { x, y };
       }
 
-      // 3. 開放四を作る（ほぼ勝ち）
-      for (const { x, y } of candidates) {
-        const threats = analyzeThreatsMain(x, y, player);
-        if (threats.openFour > 0) return { x, y };
-      }
-
-      // 4. 相手の開放四を防ぐ
-      for (const { x, y } of candidates) {
-        const threats = analyzeThreatsMain(x, y, enemy);
-        if (threats.openFour > 0) return { x, y };
-      }
-
-      // 5. 四三コンボを作る（勝ち確定）
-      for (const { x, y } of candidates) {
-        const threats = analyzeThreatsMain(x, y, player);
-        if (threats.four > 0 && threats.openThree > 0) return { x, y };
-        if (threats.four >= 2) return { x, y };
-      }
-
-      // 6. 相手の四三コンボを防ぐ
-      for (const { x, y } of candidates) {
-        const threats = analyzeThreatsMain(x, y, enemy);
-        if (threats.four > 0 && threats.openThree > 0) return { x, y };
-        if (threats.four >= 2) return { x, y };
-      }
-
-      // 7. 双三を作る
-      for (const { x, y } of candidates) {
-        const threats = analyzeThreatsMain(x, y, player);
-        if (threats.openThree >= 2) return { x, y };
-      }
-
-      // 8. 相手の双三を防ぐ
-      for (const { x, y } of candidates) {
-        const threats = analyzeThreatsMain(x, y, enemy);
-        if (threats.openThree >= 2) return { x, y };
-      }
-
       return null;
-    }
-
-    // メインスレッド用の脅威分析
-    function analyzeThreatsMain(x, y, player) {
-      const threats = { five: 0, openFour: 0, four: 0, openThree: 0, three: 0 };
-      board[y][x] = player;
-      
-      for (const [dx, dy] of DIRECTIONS) {
-        let count = 1;
-        let openEnds = 0;
-        
-        // 正方向
-        for (let i = 1; i <= 5; i++) {
-          const nx = x + dx * i, ny = y + dy * i;
-          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
-          if (board[ny][nx] === player) count++;
-          else if (board[ny][nx] === EMPTY) { openEnds++; break; }
-          else break;
-        }
-        // 負方向
-        for (let i = 1; i <= 5; i++) {
-          const nx = x - dx * i, ny = y - dy * i;
-          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
-          if (board[ny][nx] === player) count++;
-          else if (board[ny][nx] === EMPTY) { openEnds++; break; }
-          else break;
-        }
-        
-        count = Math.min(count, 5);
-        if (count >= 5) threats.five++;
-        else if (count === 4 && openEnds === 2) threats.openFour++;
-        else if (count === 4 && openEnds === 1) threats.four++;
-        else if (count === 3 && openEnds === 2) threats.openThree++;
-        else if (count === 3 && openEnds === 1) threats.three++;
-      }
-      
-      board[y][x] = EMPTY;
-      return threats;
     }
 
     async function calculateAiMoveParallel(type, player) {
@@ -1443,12 +1367,45 @@
       isAiThinking = true;
       updateStatus();
 
-      const move = await calculateAiMoveParallel(aiType, WHITE);
+      let move;
+      if (aiType === 'ultimate') {
+        // 最強のみWorker並列
+        move = await calculateAiMoveParallel(aiType, WHITE);
+      } else {
+        // 他はメインスレッドで計算
+        move = calculateAiMoveSimple(aiType, WHITE);
+      }
       
       isAiThinking = false;
       if (move && !gameOver) {
         makeMove(move.x, move.y);
       }
+    }
+
+    // 最強以外用のシンプルなAI（メインスレッド）
+    function calculateAiMoveSimple(type, player) {
+      if (moveHistory.length === 0) {
+        return { x: 7, y: 7 };
+      }
+      if (moveHistory.length === 1) {
+        const first = moveHistory[0];
+        const offsets = [[1, 1], [-1, -1], [1, -1], [-1, 1], [1, 0], [0, 1]];
+        for (const [dx, dy] of offsets) {
+          const nx = first.x + dx, ny = first.y + dy;
+          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && board[ny][nx] === EMPTY) {
+            return { x: nx, y: ny };
+          }
+        }
+      }
+
+      const emergency = findEmergencyMove(player);
+      if (emergency) return emergency;
+
+      const candidates = generateCandidates();
+      if (candidates.length === 0) return null;
+      
+      // 一番優先度の高い手を返す
+      return candidates[0];
     }
 
     // ========================================
@@ -1493,7 +1450,15 @@
       updateStatus();
 
       const currentAiType = currentPlayer === BLACK ? blackAiType : whiteAiType;
-      const move = await calculateAiMoveParallel(currentAiType, currentPlayer);
+      
+      let move;
+      if (currentAiType === 'ultimate') {
+        // 最強のみWorker並列
+        move = await calculateAiMoveParallel(currentAiType, currentPlayer);
+      } else {
+        // 他はメインスレッドで計算
+        move = calculateAiMoveSimple(currentAiType, currentPlayer);
+      }
 
       isAiThinking = false;
 
