@@ -509,31 +509,74 @@
       };
 
       const PATTERN_DICT = {
+        // 五連（勝ち）
         'XXXXX': 10000000,
-        '_XXXX_': 500000,
-        'XXXX_': 100000,
-        '_XXXX': 100000,
-        'XXX_X': 80000,
-        'XX_XX': 80000,
-        'X_XXX': 80000,
+        
+        // 開放四（次で勝ち確定）
+        '_XXXX_': 5000000,
+        
+        // 四（片側閉じ）
+        'XXXX_': 500000,
+        '_XXXX': 500000,
+        'OXXXX_': 500000,
+        '_XXXXO': 500000,
+        
+        // 飛び四（1つ空きがある四）
+        'XXX_X': 400000,
+        'XX_XX': 400000,
+        'X_XXX': 400000,
+        '_XXX_X': 400000,
+        'X_XXX_': 400000,
+        '_XX_XX': 400000,
+        'XX_XX_': 400000,
+        
+        // 開放三（両側空き - 非常に危険）
         '_XXX_': 50000,
-        'XXX__': 8000,
-        '__XXX': 8000,
+        '__XXX__': 50000,
+        
+        // 飛び三（開放）
         '_XX_X_': 40000,
         '_X_XX_': 40000,
-        'XX__X': 5000,
-        'X__XX': 5000,
+        '_X_X_X_': 30000,
+        
+        // 片三
+        'XXX__': 8000,
+        '__XXX': 8000,
+        'OXXX__': 8000,
+        '__XXXO': 8000,
+        
+        // 飛び三（片）
+        'XX__X': 6000,
+        'X__XX': 6000,
+        'XX_X_': 6000,
+        '_X_XX': 6000,
+        'X_X_X': 5000,
+        
+        // 開放二
         '_XX_': 3000,
+        '__XX__': 3000,
+        '_XX__': 2000,
+        '__XX_': 2000,
+        
+        // 飛び二
+        '_X_X_': 2500,
+        'X__X': 1500,
+        
+        // 片二
         'XX___': 500,
         '___XX': 500,
-        '_X_X_': 2000,
+        'OXX___': 500,
+        '___XXO': 500,
+        
+        // 単石（中央寄りボーナスで補完）
+        '_X_': 100,
       };
 
       const AI_CONFIG = {
         aggressive: { depth: 2, attackMult: 1.3, defenseMult: 0.8 },
         defensive:  { depth: 2, attackMult: 0.8, defenseMult: 1.4 },
         strategic:  { depth: 3, attackMult: 1.0, defenseMult: 1.0 },
-        ultimate:   { depth: 6, attackMult: 1.0, defenseMult: 1.0 }
+        ultimate:   { depth: 4, attackMult: 1.0, defenseMult: 1.0 }
       };
 
       let board = [];
@@ -627,35 +670,59 @@
       function evaluateBoard(player) {
         let score = 0;
         const enemy = -player;
+        
+        // ライン評価
         for (let y = 0; y < BOARD_SIZE; y++) {
           score += evaluateLinePatterns(0, y, 1, 0, player);
-          score -= evaluateLinePatterns(0, y, 1, 0, enemy) * 1.1;
+          score -= evaluateLinePatterns(0, y, 1, 0, enemy) * 1.2;
         }
         for (let x = 0; x < BOARD_SIZE; x++) {
           score += evaluateLinePatterns(x, 0, 0, 1, player);
-          score -= evaluateLinePatterns(x, 0, 0, 1, enemy) * 1.1;
+          score -= evaluateLinePatterns(x, 0, 0, 1, enemy) * 1.2;
         }
         for (let x = 0; x < BOARD_SIZE; x++) {
           score += evaluateLinePatterns(x, 0, 1, 1, player);
-          score -= evaluateLinePatterns(x, 0, 1, 1, enemy) * 1.1;
+          score -= evaluateLinePatterns(x, 0, 1, 1, enemy) * 1.2;
         }
         for (let y = 1; y < BOARD_SIZE; y++) {
           score += evaluateLinePatterns(0, y, 1, 1, player);
-          score -= evaluateLinePatterns(0, y, 1, 1, enemy) * 1.1;
+          score -= evaluateLinePatterns(0, y, 1, 1, enemy) * 1.2;
         }
         for (let x = 0; x < BOARD_SIZE; x++) {
           score += evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, player);
-          score -= evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, enemy) * 1.1;
+          score -= evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, enemy) * 1.2;
         }
         for (let y = 0; y < BOARD_SIZE - 1; y++) {
           score += evaluateLinePatterns(0, y, 1, -1, player);
-          score -= evaluateLinePatterns(0, y, 1, -1, enemy) * 1.1;
+          score -= evaluateLinePatterns(0, y, 1, -1, enemy) * 1.2;
         }
-        for (let y = 5; y <= 9; y++) {
-          for (let x = 5; x <= 9; x++) {
-            if (board[y][x] === player) score += 100;
+        
+        // 中央制圧ボーナス（強化）
+        for (let y = 4; y <= 10; y++) {
+          for (let x = 4; x <= 10; x++) {
+            if (board[y][x] === player) {
+              const centerDist = Math.abs(x - 7) + Math.abs(y - 7);
+              score += (7 - centerDist) * 50 + 100;
+            }
           }
         }
+        
+        // 連結ボーナス（石が繋がっているほど有利）
+        for (let y = 0; y < BOARD_SIZE; y++) {
+          for (let x = 0; x < BOARD_SIZE; x++) {
+            if (board[y][x] === player) {
+              let connections = 0;
+              for (const [dx, dy] of DIRECTIONS) {
+                const nx = x + dx, ny = y + dy;
+                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                  if (board[ny][nx] === player) connections++;
+                }
+              }
+              score += connections * 30;
+            }
+          }
+        }
+        
         return score;
       }
 
@@ -700,20 +767,51 @@
         let score = 0;
         const enemy = -player;
         const myThreats = analyzeThreats(x, y, player);
+        const enemyThreats = analyzeThreats(x, y, enemy);
+        
+        // 即勝ち
         if (myThreats.five > 0) return 100000000;
-        if (myThreats.openFour > 0) score += 5000000;
+        
+        // 相手の即勝ちを防ぐ
+        if (enemyThreats.five > 0) return 90000000;
+        
+        // 自分の開放四（ほぼ勝ち確定）
+        if (myThreats.openFour > 0) return 80000000;
+        
+        // 相手の開放四を防ぐ
+        if (enemyThreats.openFour > 0) return 70000000;
+        
+        // 自分の四三（勝ち確定コンボ）
+        if (myThreats.four > 0 && myThreats.openThree > 0) return 60000000;
+        
+        // 自分の双四（勝ち確定コンボ）
+        if (myThreats.four >= 2) return 55000000;
+        
+        // 相手の四三を防ぐ
+        if (enemyThreats.four > 0 && enemyThreats.openThree > 0) return 50000000;
+        
+        // 相手の双四を防ぐ
+        if (enemyThreats.four >= 2) return 45000000;
+        
+        // 自分の双三（強い攻め）
+        if (myThreats.openThree >= 2) return 40000000;
+        
+        // 相手の双三を防ぐ
+        if (enemyThreats.openThree >= 2) return 35000000;
+        
+        // 通常の評価
         if (myThreats.four > 0) score += 500000;
         if (myThreats.openThree > 0) score += 50000;
-        const enemyThreats = analyzeThreats(x, y, enemy);
-        if (enemyThreats.five > 0) return 90000000;
-        if (enemyThreats.openFour > 0) score += 4000000;
+        if (myThreats.three > 0) score += 5000;
+        
         if (enemyThreats.four > 0) score += 400000;
         if (enemyThreats.openThree > 0) score += 40000;
-        if (myThreats.openFour > 0 && myThreats.openThree > 0) score += 2000000;
-        if (myThreats.four >= 2) score += 1500000;
-        if (myThreats.openThree >= 2) score += 800000;
+        if (enemyThreats.three > 0) score += 4000;
+        
+        // 中央ボーナス
         const dist = Math.abs(x - 7) + Math.abs(y - 7);
-        score += (14 - dist) * 50;
+        score += (14 - dist) * 100;
+        
         return score;
       }
 
@@ -1183,7 +1281,7 @@
       const enemy = -player;
       const candidates = generateCandidates();
 
-      // 即勝ち
+      // 1. 即勝ち
       for (const { x, y } of candidates) {
         board[y][x] = player;
         const win = checkWin(x, y, player);
@@ -1191,7 +1289,7 @@
         if (win) return { x, y };
       }
 
-      // 即負け防止
+      // 2. 即負け防止
       for (const { x, y } of candidates) {
         board[y][x] = enemy;
         const lose = checkWin(x, y, enemy);
@@ -1199,7 +1297,83 @@
         if (lose) return { x, y };
       }
 
+      // 3. 開放四を作る（ほぼ勝ち）
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsMain(x, y, player);
+        if (threats.openFour > 0) return { x, y };
+      }
+
+      // 4. 相手の開放四を防ぐ
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsMain(x, y, enemy);
+        if (threats.openFour > 0) return { x, y };
+      }
+
+      // 5. 四三コンボを作る（勝ち確定）
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsMain(x, y, player);
+        if (threats.four > 0 && threats.openThree > 0) return { x, y };
+        if (threats.four >= 2) return { x, y };
+      }
+
+      // 6. 相手の四三コンボを防ぐ
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsMain(x, y, enemy);
+        if (threats.four > 0 && threats.openThree > 0) return { x, y };
+        if (threats.four >= 2) return { x, y };
+      }
+
+      // 7. 双三を作る
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsMain(x, y, player);
+        if (threats.openThree >= 2) return { x, y };
+      }
+
+      // 8. 相手の双三を防ぐ
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsMain(x, y, enemy);
+        if (threats.openThree >= 2) return { x, y };
+      }
+
       return null;
+    }
+
+    // メインスレッド用の脅威分析
+    function analyzeThreatsMain(x, y, player) {
+      const threats = { five: 0, openFour: 0, four: 0, openThree: 0, three: 0 };
+      board[y][x] = player;
+      
+      for (const [dx, dy] of DIRECTIONS) {
+        let count = 1;
+        let openEnds = 0;
+        
+        // 正方向
+        for (let i = 1; i <= 5; i++) {
+          const nx = x + dx * i, ny = y + dy * i;
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+          if (board[ny][nx] === player) count++;
+          else if (board[ny][nx] === EMPTY) { openEnds++; break; }
+          else break;
+        }
+        // 負方向
+        for (let i = 1; i <= 5; i++) {
+          const nx = x - dx * i, ny = y - dy * i;
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+          if (board[ny][nx] === player) count++;
+          else if (board[ny][nx] === EMPTY) { openEnds++; break; }
+          else break;
+        }
+        
+        count = Math.min(count, 5);
+        if (count >= 5) threats.five++;
+        else if (count === 4 && openEnds === 2) threats.openFour++;
+        else if (count === 4 && openEnds === 1) threats.four++;
+        else if (count === 3 && openEnds === 2) threats.openThree++;
+        else if (count === 3 && openEnds === 1) threats.three++;
+      }
+      
+      board[y][x] = EMPTY;
+      return threats;
     }
 
     async function calculateAiMoveParallel(type, player) {
