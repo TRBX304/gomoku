@@ -1,0 +1,2240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>五目並べ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      color: #fff;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 12px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .mode-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .mode-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #2d3748;
+      color: #fff;
+    }
+
+    .mode-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .mode-btn.active {
+      background: #4299e1;
+      box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+    }
+
+    .ai-types {
+      display: none;
+      gap: 6px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .ai-types.visible {
+      display: flex;
+    }
+
+    .ai-btn {
+      padding: 8px 16px;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #fff;
+    }
+
+    .ai-btn.aggressive {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+    }
+
+    .ai-btn.aggressive.active {
+      background: #ef4444;
+    }
+
+    .ai-btn.defensive {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: #3b82f6;
+    }
+
+    .ai-btn.defensive.active {
+      background: #3b82f6;
+    }
+
+    .ai-btn.strategic {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: #22c55e;
+    }
+
+    .ai-btn.strategic.active {
+      background: #22c55e;
+    }
+
+    .ai-btn.ultimate {
+      background: rgba(168, 85, 247, 0.2);
+      border-color: #a855f7;
+    }
+
+    .ai-btn.ultimate.active {
+      background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+      animation: ultimatePulse 2s infinite;
+    }
+
+    @keyframes ultimatePulse {
+      0%, 100% { box-shadow: 0 0 5px #a855f7; }
+      50% { box-shadow: 0 0 20px #a855f7, 0 0 30px #6366f1; }
+    }
+
+    .ai-vs-ai-selector {
+      display: none;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      padding: 12px 20px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+    }
+
+    .ai-vs-ai-selector.visible {
+      display: flex;
+    }
+
+    .ai-select-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ai-select-group label {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .ai-select-buttons {
+      display: flex;
+      gap: 4px;
+    }
+
+    .ai-select-btn {
+      width: 40px;
+      height: 40px;
+      border: 2px solid #4a5568;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .ai-select-btn:hover {
+      transform: scale(1.1);
+    }
+
+    .ai-select-btn.aggressive.active { border-color: #ef4444; background: rgba(239,68,68,0.3); }
+    .ai-select-btn.defensive.active { border-color: #3b82f6; background: rgba(59,130,246,0.3); }
+    .ai-select-btn.strategic.active { border-color: #22c55e; background: rgba(34,197,94,0.3); }
+    .ai-select-btn.ultimate.active { border-color: #a855f7; background: rgba(168,85,247,0.3); }
+
+    .vs-label {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #f59e0b;
+    }
+
+    .battle-controls {
+      display: none;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .battle-controls.visible {
+      display: flex;
+    }
+
+    .battle-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .battle-btn.start {
+      background: #22c55e;
+      color: #fff;
+    }
+
+    .battle-btn.pause {
+      background: #f59e0b;
+      color: #fff;
+    }
+
+    .battle-btn.stop {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      font-size: 0.85rem;
+    }
+
+    .speed-control input {
+      width: 80px;
+    }
+
+    .status {
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+      padding: 8px 20px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .board-container {
+      position: relative;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .ctrl-btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #4a5568;
+      color: #fff;
+    }
+
+    .ctrl-btn:hover {
+      background: #5a6578;
+      transform: translateY(-2px);
+    }
+
+    .ctrl-btn:active {
+      transform: translateY(0);
+    }
+
+    .ctrl-btn.primary {
+      background: #48bb78;
+    }
+
+    .ctrl-btn.primary:hover {
+      background: #38a169;
+    }
+
+    .score-board {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 12px;
+      font-size: 1rem;
+    }
+
+    .score {
+      padding: 6px 16px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .score.black {
+      border-left: 4px solid #1a1a1a;
+    }
+
+    .score.white {
+      border-left: 4px solid #fff;
+    }
+
+    .winner-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .winner-overlay.visible {
+      display: flex;
+    }
+
+    .winner-modal {
+      background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+      padding: 32px 48px;
+      border-radius: 16px;
+      text-align: center;
+      animation: popIn 0.3s ease-out;
+    }
+
+    @keyframes popIn {
+      from {
+        transform: scale(0.8);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .winner-modal h2 {
+      font-size: 2rem;
+      margin-bottom: 16px;
+    }
+
+    .winner-modal .stone-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+    }
+
+    .winner-modal .stone-icon.black {
+      background: radial-gradient(circle at 30% 30%, #4a4a4a, #1a1a1a);
+    }
+
+    .winner-modal .stone-icon.white {
+      background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+    }
+
+    .winner-modal button {
+      margin-top: 16px;
+      padding: 12px 32px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #4299e1;
+      color: #fff;
+      transition: all 0.2s;
+    }
+
+    .winner-modal button:hover {
+      background: #3182ce;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 五目並べ</h1>
+
+  <div class="mode-selector">
+    <button class="mode-btn active" data-mode="pvp">👥 二人プレイ</button>
+    <button class="mode-btn" data-mode="ai">🤖 AI対戦</button>
+    <button class="mode-btn" data-mode="aivai">🤖⚔️🤖 AI同士</button>
+  </div>
+
+  <div class="ai-types" id="aiTypes">
+    <button class="ai-btn aggressive active" data-ai="aggressive">🔥 攻撃型</button>
+    <button class="ai-btn defensive" data-ai="defensive">🛡️ 防御型</button>
+    <button class="ai-btn strategic" data-ai="strategic">⚖️ バランス型</button>
+    <button class="ai-btn ultimate" data-ai="ultimate">👹 最強</button>
+  </div>
+
+  <div class="ai-vs-ai-selector" id="aiVsAiSelector">
+    <div class="ai-select-group">
+      <label>⚫ 黒AI</label>
+      <div class="ai-select-buttons" id="blackAiButtons">
+        <button class="ai-select-btn aggressive active" data-ai="aggressive">🔥</button>
+        <button class="ai-select-btn defensive" data-ai="defensive">🛡️</button>
+        <button class="ai-select-btn strategic" data-ai="strategic">⚖️</button>
+        <button class="ai-select-btn ultimate" data-ai="ultimate">👹</button>
+      </div>
+    </div>
+    <div class="vs-label">VS</div>
+    <div class="ai-select-group">
+      <label>⚪ 白AI</label>
+      <div class="ai-select-buttons" id="whiteAiButtons">
+        <button class="ai-select-btn aggressive" data-ai="aggressive">🔥</button>
+        <button class="ai-select-btn defensive" data-ai="defensive">🛡️</button>
+        <button class="ai-select-btn strategic" data-ai="strategic">⚖️</button>
+        <button class="ai-select-btn ultimate active" data-ai="ultimate">👹</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="score-board">
+    <div class="score black">⚫ 黒: <span id="blackScore">0</span></div>
+    <div class="score white">⚪ 白: <span id="whiteScore">0</span></div>
+  </div>
+
+  <div class="status" id="status">黒の番です</div>
+
+  <div class="battle-controls" id="battleControls">
+    <button class="battle-btn start" id="startBattleBtn">▶️ 開始</button>
+    <button class="battle-btn pause" id="pauseBattleBtn">⏸️ 一時停止</button>
+    <button class="battle-btn stop" id="stopBattleBtn">⏹️ 停止</button>
+    <div class="speed-control">
+      <label>速度:</label>
+      <input type="range" id="battleSpeed" min="100" max="2000" value="800">
+    </div>
+  </div>
+
+  <div class="board-container">
+    <canvas id="board"></canvas>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn" id="undoBtn">↩️ 待った</button>
+    <button class="ctrl-btn primary" id="resetBtn">🔄 リセット</button>
+  </div>
+
+  <div class="winner-overlay" id="winnerOverlay">
+    <div class="winner-modal">
+      <div class="stone-icon" id="winnerStone"></div>
+      <h2 id="winnerText">黒の勝ち！</h2>
+      <button id="playAgainBtn">もう一度プレイ</button>
+    </div>
+  </div>
+
+  <script>
+    // ========================================
+    // Game Constants
+    // ========================================
+    const BOARD_SIZE = 15;
+    const EMPTY = 0;
+    const BLACK = 1;  // 人間（先手）
+    const WHITE = -1; // 対戦相手（後手）
+
+    // ========================================
+    // Game State
+    // ========================================
+    let board = [];
+    let currentPlayer = BLACK;
+    let gameOver = false;
+    let moveHistory = [];
+    let scores = { black: 0, white: 0 };
+    let gameMode = 'pvp'; // 'pvp', 'ai', or 'aivai'
+    let aiType = 'aggressive';
+    let isAiThinking = false;
+    
+    // AI vs AI モード用
+    let blackAiType = 'aggressive';
+    let whiteAiType = 'ultimate';
+    let battleRunning = false;
+    let battlePaused = false;
+    let battleTimeoutId = null;
+
+    // ========================================
+    // Canvas Setup
+    // ========================================
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    let cellSize, padding, boardPixelSize;
+
+    function initCanvas() {
+      const maxSize = Math.min(window.innerWidth - 32, 500);
+      boardPixelSize = maxSize;
+      canvas.width = boardPixelSize;
+      canvas.height = boardPixelSize;
+      padding = boardPixelSize * 0.04;
+      cellSize = (boardPixelSize - padding * 2) / (BOARD_SIZE - 1);
+    }
+
+    // ========================================
+    // Board Rendering
+    // ========================================
+    function drawBoard() {
+      // Background
+      ctx.fillStyle = '#dcb35c';
+      ctx.fillRect(0, 0, boardPixelSize, boardPixelSize);
+
+      // Grid lines
+      ctx.strokeStyle = '#8b7355';
+      ctx.lineWidth = 1;
+
+      for (let i = 0; i < BOARD_SIZE; i++) {
+        const pos = padding + i * cellSize;
+        
+        // Vertical
+        ctx.beginPath();
+        ctx.moveTo(pos, padding);
+        ctx.lineTo(pos, boardPixelSize - padding);
+        ctx.stroke();
+
+        // Horizontal
+        ctx.beginPath();
+        ctx.moveTo(padding, pos);
+        ctx.lineTo(boardPixelSize - padding, pos);
+        ctx.stroke();
+      }
+
+      // Star points (天元と星)
+      const starPoints = [
+        [3, 3], [3, 7], [3, 11],
+        [7, 3], [7, 7], [7, 11],
+        [11, 3], [11, 7], [11, 11]
+      ];
+
+      ctx.fillStyle = '#8b7355';
+      starPoints.forEach(([x, y]) => {
+        const px = padding + x * cellSize;
+        const py = padding + y * cellSize;
+        ctx.beginPath();
+        ctx.arc(px, py, cellSize * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawStones() {
+      const lastMove = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null;
+
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          if (board[y][x] !== EMPTY) {
+            drawStone(x, y, board[y][x], lastMove && lastMove.x === x && lastMove.y === y);
+          }
+        }
+      }
+    }
+
+    function drawStone(x, y, player, isLast = false) {
+      const px = padding + x * cellSize;
+      const py = padding + y * cellSize;
+      const radius = cellSize * 0.43;
+
+      // Shadow
+      ctx.beginPath();
+      ctx.arc(px + 2, py + 2, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fill();
+
+      // Stone
+      const gradient = ctx.createRadialGradient(
+        px - radius * 0.3, py - radius * 0.3, radius * 0.1,
+        px, py, radius
+      );
+
+      if (player === BLACK) {
+        gradient.addColorStop(0, '#4a4a4a');
+        gradient.addColorStop(1, '#1a1a1a');
+      } else {
+        gradient.addColorStop(0, '#ffffff');
+        gradient.addColorStop(1, '#cccccc');
+      }
+
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Last move marker
+      if (isLast) {
+        ctx.beginPath();
+        ctx.arc(px, py, radius * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = player === BLACK ? '#ff6b6b' : '#e74c3c';
+        ctx.fill();
+      }
+    }
+
+    function render() {
+      drawBoard();
+      drawStones();
+    }
+
+    // ========================================
+    // Game Logic
+    // ========================================
+    function initBoard() {
+      board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(EMPTY));
+      currentPlayer = BLACK;
+      gameOver = false;
+      moveHistory = [];
+      isAiThinking = false;
+      updateStatus();
+      render();
+    }
+
+    function isValidMove(x, y) {
+      return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[y][x] === EMPTY;
+    }
+
+    function makeMove(x, y) {
+      if (!isValidMove(x, y) || gameOver || isAiThinking) return false;
+
+      board[y][x] = currentPlayer;
+      moveHistory.push({ x, y, player: currentPlayer });
+
+      if (checkWin(x, y, currentPlayer)) {
+        gameOver = true;
+        render();
+        showWinner(currentPlayer);
+        return true;
+      }
+
+      if (checkDraw()) {
+        gameOver = true;
+        render();
+        showDraw();
+        return true;
+      }
+
+      currentPlayer = currentPlayer === BLACK ? WHITE : BLACK;
+      updateStatus();
+      render();
+
+      // AI's turn
+      if (gameMode === 'ai' && currentPlayer === WHITE && !gameOver) {
+        isAiThinking = true;
+        updateStatus();
+        setTimeout(() => {
+          aiMove();
+        }, getAiDelay());
+      }
+
+      return true;
+    }
+
+    function undoMove() {
+      if (moveHistory.length === 0 || gameOver) return;
+
+      // In AI mode, undo two moves (player + AI)
+      const undoCount = gameMode === 'ai' && moveHistory.length >= 2 ? 2 : 1;
+      
+      for (let i = 0; i < undoCount && moveHistory.length > 0; i++) {
+        const lastMove = moveHistory.pop();
+        board[lastMove.y][lastMove.x] = EMPTY;
+      }
+
+      currentPlayer = moveHistory.length % 2 === 0 ? BLACK : WHITE;
+      updateStatus();
+      render();
+    }
+
+    function checkWin(x, y, player) {
+      const directions = [
+        [1, 0],  // horizontal
+        [0, 1],  // vertical
+        [1, 1],  // diagonal
+        [1, -1]  // anti-diagonal
+      ];
+
+      for (const [dx, dy] of directions) {
+        let count = 1;
+
+        // Positive direction
+        for (let i = 1; i < 5; i++) {
+          const nx = x + dx * i;
+          const ny = y + dy * i;
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+          if (board[ny][nx] !== player) break;
+          count++;
+        }
+
+        // Negative direction
+        for (let i = 1; i < 5; i++) {
+          const nx = x - dx * i;
+          const ny = y - dy * i;
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+          if (board[ny][nx] !== player) break;
+          count++;
+        }
+
+        if (count >= 5) return true;
+      }
+
+      return false;
+    }
+
+    function checkDraw() {
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          if (board[y][x] === EMPTY) return false;
+        }
+      }
+      return true;
+    }
+
+    // ========================================
+    // 最強AI用 - Zobrist Hashing & 置換表
+    // ========================================
+    
+    // Zobrist テーブル初期化
+    const zobristTable = [];
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      zobristTable[y] = [];
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        zobristTable[y][x] = {
+          [BLACK]: Math.floor(Math.random() * 2147483647),
+          [WHITE]: Math.floor(Math.random() * 2147483647)
+        };
+      }
+    }
+
+    // 置換表（トランスポジションテーブル）
+    const transpositionTable = new Map();
+    const TT_EXACT = 0;
+    const TT_LOWER = 1;
+    const TT_UPPER = 2;
+    const MAX_TT_SIZE = 100000;
+
+    // 現在の盤面ハッシュ
+    let currentHash = 0;
+
+    function computeHash() {
+      let hash = 0;
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          if (board[y][x] !== EMPTY) {
+            hash ^= zobristTable[y][x][board[y][x]];
+          }
+        }
+      }
+      return hash;
+    }
+
+    function updateHash(x, y, player) {
+      currentHash ^= zobristTable[y][x][player];
+    }
+
+    // 置換表エントリの保存
+    function storeTT(hash, depth, score, flag, bestMove) {
+      if (transpositionTable.size > MAX_TT_SIZE) {
+        // 古いエントリを削除（簡易LRU）
+        const firstKey = transpositionTable.keys().next().value;
+        transpositionTable.delete(firstKey);
+      }
+      transpositionTable.set(hash, { depth, score, flag, bestMove });
+    }
+
+    // 置換表からの検索
+    function probeTT(hash, depth, alpha, beta) {
+      const entry = transpositionTable.get(hash);
+      if (!entry || entry.depth < depth) return null;
+      
+      if (entry.flag === TT_EXACT) {
+        return { score: entry.score, bestMove: entry.bestMove };
+      } else if (entry.flag === TT_LOWER && entry.score >= beta) {
+        return { score: entry.score, bestMove: entry.bestMove };
+      } else if (entry.flag === TT_UPPER && entry.score <= alpha) {
+        return { score: entry.score, bestMove: entry.bestMove };
+      }
+      return { bestMove: entry.bestMove }; // 最善手のヒントのみ
+    }
+
+    // ========================================
+    // 最強AI用 - 高度なパターン評価
+    // ========================================
+    
+    // パターン辞書（6マス範囲で評価）
+    const PATTERN_DICT = {
+      // 自分のパターン（数字は石の数、_は空き）
+      'XXXXX': 10000000,   // 五連
+      '_XXXX_': 500000,    // 開放四
+      'XXXX_': 100000,     // 片四
+      '_XXXX': 100000,
+      'XXX_X': 80000,      // 飛び四
+      'XX_XX': 80000,
+      'X_XXX': 80000,
+      '_XXX_': 50000,      // 開放三
+      'XXX__': 8000,       // 片三
+      '__XXX': 8000,
+      '_XX_X_': 40000,     // 飛び三（開放）
+      '_X_XX_': 40000,
+      'XX__X': 5000,       // 飛び三（片）
+      'X__XX': 5000,
+      '_XX_': 3000,        // 開放二
+      'XX___': 500,        // 片二
+      '___XX': 500,
+      '_X_X_': 2000,       // 飛び二
+    };
+
+    // ラインをパターン文字列に変換
+    function lineToPattern(line, player) {
+      let pattern = '';
+      for (const cell of line) {
+        if (cell === player) pattern += 'X';
+        else if (cell === EMPTY) pattern += '_';
+        else pattern += 'O'; // 相手
+      }
+      return pattern;
+    }
+
+    // パターンマッチングによる評価
+    function evaluateLinePatterns(startX, startY, dx, dy, player) {
+      let score = 0;
+      const line = [];
+      
+      let x = startX, y = startY;
+      while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+        line.push(board[y][x]);
+        x += dx;
+        y += dy;
+      }
+
+      // 6マスウィンドウでスライド
+      for (let i = 0; i <= line.length - 5; i++) {
+        const window5 = line.slice(i, i + 5);
+        const pattern5 = lineToPattern(window5, player);
+        
+        // 相手の石が含まれていなければパターンチェック
+        if (!pattern5.includes('O')) {
+          for (const [pat, val] of Object.entries(PATTERN_DICT)) {
+            if (pattern5.includes(pat) || pat.includes(pattern5)) {
+              score += val;
+            }
+          }
+        }
+        
+        // 6マスウィンドウ
+        if (i + 6 <= line.length) {
+          const window6 = line.slice(i, i + 6);
+          const pattern6 = lineToPattern(window6, player);
+          if (!pattern6.includes('O')) {
+            for (const [pat, val] of Object.entries(PATTERN_DICT)) {
+              if (pattern6 === pat) {
+                score += val;
+              }
+            }
+          }
+        }
+      }
+
+      return score;
+    }
+
+    // 最強用盤面評価
+    function evaluateBoardUltimate(player) {
+      let score = 0;
+      const enemy = -player;
+
+      // 全方向をスキャン
+      // 横
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        score += evaluateLinePatterns(0, y, 1, 0, player);
+        score -= evaluateLinePatterns(0, y, 1, 0, enemy) * 1.1; // 防御重視
+      }
+      // 縦
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        score += evaluateLinePatterns(x, 0, 0, 1, player);
+        score -= evaluateLinePatterns(x, 0, 0, 1, enemy) * 1.1;
+      }
+      // 斜め
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        score += evaluateLinePatterns(x, 0, 1, 1, player);
+        score -= evaluateLinePatterns(x, 0, 1, 1, enemy) * 1.1;
+        score += evaluateLinePatterns(x, 0, 1, -1, player);
+        score -= evaluateLinePatterns(x, 0, 1, -1, enemy) * 1.1;
+      }
+      for (let y = 1; y < BOARD_SIZE; y++) {
+        score += evaluateLinePatterns(0, y, 1, 1, player);
+        score -= evaluateLinePatterns(0, y, 1, 1, enemy) * 1.1;
+        score += evaluateLinePatterns(0, y, 1, -1, player);
+        score -= evaluateLinePatterns(0, y, 1, -1, enemy) * 1.1;
+        score += evaluateLinePatterns(BOARD_SIZE - 1, y, -1, 1, player);
+        score -= evaluateLinePatterns(BOARD_SIZE - 1, y, -1, 1, enemy) * 1.1;
+      }
+
+      // 中央制圧ボーナス
+      for (let y = 5; y <= 9; y++) {
+        for (let x = 5; x <= 9; x++) {
+          if (board[y][x] === player) score += 100;
+        }
+      }
+
+      return score;
+    }
+
+    // ========================================
+    // 最強AI用 - 候補手生成（高精度）
+    // ========================================
+    
+    function generateCandidatesUltimate(maxCandidates = 20) {
+      if (moveHistory.length === 0) {
+        return [{ x: 7, y: 7, priority: 1000000 }];
+      }
+
+      const candidateMap = new Map();
+
+      // 距離2以内の空きマス
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          if (board[y][x] !== EMPTY) {
+            for (let dy = -2; dy <= 2; dy++) {
+              for (let dx = -2; dx <= 2; dx++) {
+                const ny = y + dy;
+                const nx = x + dx;
+                if (ny >= 0 && ny < BOARD_SIZE && nx >= 0 && nx < BOARD_SIZE && board[ny][nx] === EMPTY) {
+                  const key = `${nx},${ny}`;
+                  if (!candidateMap.has(key)) {
+                    const priority = quickEvaluateUltimate(nx, ny);
+                    candidateMap.set(key, { x: nx, y: ny, priority });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const candidates = Array.from(candidateMap.values());
+      candidates.sort((a, b) => b.priority - a.priority);
+      return candidates.slice(0, maxCandidates);
+    }
+
+    // 高速優先度評価（最強用）
+    function quickEvaluateUltimate(x, y) {
+      let score = 0;
+      
+      // 自分の脅威
+      const myThreats = analyzeThreats(x, y, WHITE);
+      if (myThreats.five > 0) return 100000000;
+      if (myThreats.openFour > 0) score += 5000000;
+      if (myThreats.four > 0) score += 500000;
+      if (myThreats.openThree > 0) score += 50000;
+      
+      // 相手の脅威
+      const enemyThreats = analyzeThreats(x, y, BLACK);
+      if (enemyThreats.five > 0) return 90000000;
+      if (enemyThreats.openFour > 0) score += 4000000;
+      if (enemyThreats.four > 0) score += 400000;
+      if (enemyThreats.openThree > 0) score += 40000;
+      
+      // コンボ検出（四三、双四、双三）
+      if (myThreats.openFour > 0 && myThreats.openThree > 0) score += 2000000;
+      if (myThreats.four >= 2) score += 1500000;
+      if (myThreats.openThree >= 2) score += 800000;
+      
+      // 中央ボーナス
+      const dist = Math.abs(x - 7) + Math.abs(y - 7);
+      score += (14 - dist) * 50;
+      
+      return score;
+    }
+
+    // ========================================
+    // 最強AI用 - Alpha-Beta with 置換表
+    // ========================================
+    
+    function alphaBetaUltimate(depth, alpha, beta, isMaximizing, aiPlayer) {
+      const hash = computeHash();
+      
+      // 置換表チェック
+      const ttEntry = probeTT(hash, depth, alpha, beta);
+      if (ttEntry && ttEntry.score !== undefined) {
+        return { score: ttEntry.score, move: ttEntry.bestMove };
+      }
+      
+      // 終端チェック
+      if (depth === 0) {
+        return { score: evaluateBoardUltimate(aiPlayer), move: null };
+      }
+
+      const currentPlayer = isMaximizing ? aiPlayer : -aiPlayer;
+      
+      // 候補手生成（置換表の最善手を優先）
+      let candidates = generateCandidatesUltimate(depth > 2 ? 12 : 18);
+      
+      // 置換表の最善手を先頭に
+      if (ttEntry && ttEntry.bestMove) {
+        const ttMove = ttEntry.bestMove;
+        candidates = candidates.filter(c => c.x !== ttMove.x || c.y !== ttMove.y);
+        candidates.unshift(ttMove);
+      }
+
+      if (candidates.length === 0) {
+        return { score: 0, move: null };
+      }
+
+      // 即座の勝敗チェック
+      for (const { x, y } of candidates) {
+        board[y][x] = currentPlayer;
+        const win = checkWin(x, y, currentPlayer);
+        board[y][x] = EMPTY;
+        
+        if (win) {
+          const winScore = PATTERN_SCORES.FIVE * (depth + 1);
+          return { 
+            score: isMaximizing ? winScore : -winScore, 
+            move: { x, y } 
+          };
+        }
+      }
+
+      let bestMove = candidates[0];
+      let ttFlag = TT_UPPER;
+
+      if (isMaximizing) {
+        let maxScore = -Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentPlayer;
+          updateHash(x, y, currentPlayer);
+          
+          const result = alphaBetaUltimate(depth - 1, alpha, beta, false, aiPlayer);
+          
+          board[y][x] = EMPTY;
+          updateHash(x, y, currentPlayer);
+
+          if (result.score > maxScore) {
+            maxScore = result.score;
+            bestMove = { x, y };
+          }
+          
+          alpha = Math.max(alpha, result.score);
+          if (beta <= alpha) {
+            ttFlag = TT_LOWER;
+            break;
+          }
+        }
+        
+        if (maxScore > -Infinity) {
+          storeTT(hash, depth, maxScore, alpha === maxScore ? TT_EXACT : ttFlag, bestMove);
+        }
+        return { score: maxScore, move: bestMove };
+        
+      } else {
+        let minScore = Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentPlayer;
+          updateHash(x, y, currentPlayer);
+          
+          const result = alphaBetaUltimate(depth - 1, alpha, beta, true, aiPlayer);
+          
+          board[y][x] = EMPTY;
+          updateHash(x, y, currentPlayer);
+
+          if (result.score < minScore) {
+            minScore = result.score;
+            bestMove = { x, y };
+          }
+          
+          beta = Math.min(beta, result.score);
+          if (beta <= alpha) {
+            ttFlag = TT_LOWER;
+            break;
+          }
+        }
+        
+        if (minScore < Infinity) {
+          storeTT(hash, depth, minScore, beta === minScore ? TT_EXACT : ttFlag, bestMove);
+        }
+        return { score: minScore, move: bestMove };
+      }
+    }
+
+    // ========================================
+    // 最強AI用 - 反復深化
+    // ========================================
+    
+    function iterativeDeepening(maxDepth, timeLimit) {
+      const startTime = Date.now();
+      let bestMove = null;
+      let bestScore = -Infinity;
+      
+      // 置換表クリア（新しいゲームのため）
+      if (moveHistory.length <= 2) {
+        transpositionTable.clear();
+      }
+      
+      currentHash = computeHash();
+      
+      // 反復深化：深さ2から開始し、偶数のみ（評価バイアス防止）
+      for (let depth = 2; depth <= maxDepth; depth += 2) {
+        const result = alphaBetaUltimate(depth, -Infinity, Infinity, true, WHITE);
+        
+        if (result.move) {
+          bestMove = result.move;
+          bestScore = result.score;
+        }
+        
+        // 時間制限チェック
+        if (Date.now() - startTime > timeLimit) {
+          break;
+        }
+        
+        // 勝ち確定なら即終了
+        if (bestScore >= PATTERN_SCORES.FIVE) {
+          break;
+        }
+      }
+      
+      return bestMove;
+    }
+
+    // ========================================
+    // AI Engine - 方向ベクトル
+    // ========================================
+    const DIRECTIONS = [
+      [1, 0],   // 横
+      [0, 1],   // 縦
+      [1, 1],   // 斜め右下
+      [1, -1]   // 斜め右上
+    ];
+
+    // 性格別設定
+    const AI_CONFIG = {
+      aggressive: { depth: 2, attackMult: 1.3, defenseMult: 0.8 },
+      defensive:  { depth: 2, attackMult: 0.8, defenseMult: 1.4 },
+      strategic:  { depth: 3, attackMult: 1.0, defenseMult: 1.0 },
+      ultimate:   { depth: 6, attackMult: 1.0, defenseMult: 1.0 }  // 最強
+    };
+
+    // パターンスコア（優先順位を明確に階層化）
+    const PATTERN_SCORES = {
+      FIVE:         10000000,  // 5連（勝ち）
+      OPEN_FOUR:    500000,    // 開放四（次で勝ち確定）
+      DOUBLE_THREE: 100000,    // 四三・三三などのコンボ
+      FOUR:         50000,     // 閉じた四（一手で止められる）
+      OPEN_THREE:   10000,     // 開放三（両端空き）
+      THREE:        1000,      // 閉じた三
+      OPEN_TWO:     500,       // 開放二
+      TWO:          100,       // 閉じた二
+      CENTER:       20         // 中央ボーナス
+    };
+
+    // ========================================
+    // ウィンドウスライディング評価
+    // ========================================
+    
+    // 5マスウィンドウでパターンを検出
+    function evaluateWindow(window, player) {
+      const enemy = -player;
+      let myCount = 0;
+      let enemyCount = 0;
+      let emptyCount = 0;
+
+      for (const cell of window) {
+        if (cell === player) myCount++;
+        else if (cell === enemy) enemyCount++;
+        else emptyCount++;
+      }
+
+      // 両方の石があればブロック済み
+      if (myCount > 0 && enemyCount > 0) return 0;
+
+      // 自分の石のみ
+      if (enemyCount === 0) {
+        if (myCount === 5) return PATTERN_SCORES.FIVE;
+        if (myCount === 4) return PATTERN_SCORES.OPEN_FOUR;
+        if (myCount === 3) return PATTERN_SCORES.OPEN_THREE;
+        if (myCount === 2) return PATTERN_SCORES.OPEN_TWO;
+        if (myCount === 1) return 10;
+      }
+
+      return 0;
+    }
+
+    // ライン上の全ウィンドウを評価
+    function evaluateLine(startX, startY, dx, dy, player) {
+      let score = 0;
+      const lineLength = [];
+      
+      // ライン上のセルを収集
+      let x = startX, y = startY;
+      while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+        lineLength.push(board[y][x]);
+        x += dx;
+        y += dy;
+      }
+
+      // 5マスウィンドウをスライド
+      for (let i = 0; i <= lineLength.length - 5; i++) {
+        const window = lineLength.slice(i, i + 5);
+        score += evaluateWindow(window, player);
+      }
+
+      return score;
+    }
+
+    // 盤面全体を評価
+    function evaluateBoard(player) {
+      let score = 0;
+      const enemy = -player;
+
+      // 横方向
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        score += evaluateLine(0, y, 1, 0, player);
+        score -= evaluateLine(0, y, 1, 0, enemy);
+      }
+
+      // 縦方向
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        score += evaluateLine(x, 0, 0, 1, player);
+        score -= evaluateLine(x, 0, 0, 1, enemy);
+      }
+
+      // 斜め右下（左上から開始）
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        score += evaluateLine(x, 0, 1, 1, player);
+        score -= evaluateLine(x, 0, 1, 1, enemy);
+      }
+      for (let y = 1; y < BOARD_SIZE; y++) {
+        score += evaluateLine(0, y, 1, 1, player);
+        score -= evaluateLine(0, y, 1, 1, enemy);
+      }
+
+      // 斜め右上（左下から開始）
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        score += evaluateLine(x, BOARD_SIZE - 1, 1, -1, player);
+        score -= evaluateLine(x, BOARD_SIZE - 1, 1, -1, enemy);
+      }
+      for (let y = 0; y < BOARD_SIZE - 1; y++) {
+        score += evaluateLine(0, y, 1, -1, player);
+        score -= evaluateLine(0, y, 1, -1, enemy);
+      }
+
+      // 中央ボーナス
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          if (board[y][x] === player) {
+            const dist = Math.abs(x - 7) + Math.abs(y - 7);
+            score += Math.max(0, 14 - dist) * PATTERN_SCORES.CENTER;
+          }
+        }
+      }
+
+      return score;
+    }
+
+    // ========================================
+    // 高度なパターン検出（コンボ検出用）
+    // ========================================
+    
+    // 特定の手を打った時の脅威を分析
+    function analyzeThreats(x, y, player) {
+      const threats = {
+        five: 0,
+        openFour: 0,
+        four: 0,
+        openThree: 0,
+        three: 0
+      };
+
+      board[y][x] = player;
+
+      for (const [dx, dy] of DIRECTIONS) {
+        const result = analyzeLinePattern(x, y, dx, dy, player);
+        if (result.count >= 5) threats.five++;
+        else if (result.count === 4 && result.openEnds === 2) threats.openFour++;
+        else if (result.count === 4 && result.openEnds === 1) threats.four++;
+        else if (result.count === 3 && result.openEnds === 2) threats.openThree++;
+        else if (result.count === 3 && result.openEnds === 1) threats.three++;
+      }
+
+      board[y][x] = EMPTY;
+      return threats;
+    }
+
+    // 飛び石も含めたライン分析
+    function analyzeLinePattern(x, y, dx, dy, player) {
+      let count = 1;
+      let openEnds = 0;
+      let gaps = 0;
+
+      // 正方向
+      let consecutive = true;
+      let space = 0;
+      for (let i = 1; i <= 5; i++) {
+        const nx = x + dx * i;
+        const ny = y + dy * i;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+        
+        const cell = board[ny][nx];
+        if (cell === player) {
+          count++;
+          if (!consecutive && space === 1) gaps++; // 飛び石
+          consecutive = true;
+          space = 0;
+        } else if (cell === EMPTY) {
+          if (consecutive && count < 5) {
+            space++;
+            if (space === 1) {
+              consecutive = false;
+            } else {
+              openEnds++;
+              break;
+            }
+          } else {
+            openEnds++;
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+
+      // 負方向
+      consecutive = true;
+      space = 0;
+      for (let i = 1; i <= 5; i++) {
+        const nx = x - dx * i;
+        const ny = y - dy * i;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+        
+        const cell = board[ny][nx];
+        if (cell === player) {
+          count++;
+          if (!consecutive && space === 1) gaps++;
+          consecutive = true;
+          space = 0;
+        } else if (cell === EMPTY) {
+          if (consecutive && count < 5) {
+            space++;
+            if (space === 1) {
+              consecutive = false;
+            } else {
+              openEnds++;
+              break;
+            }
+          } else {
+            openEnds++;
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+
+      // 飛び石も有効な形としてカウント（ただし5マス以内に収まる場合のみ）
+      if (gaps > 0 && count >= 3) {
+        openEnds = Math.min(openEnds, 1); // 飛び石は片側開放扱い
+      }
+
+      return { count: Math.min(count, 5), openEnds, gaps };
+    }
+
+    // ========================================
+    // 候補手生成（優先度付き）
+    // ========================================
+    
+    function generateCandidates(maxCandidates = 15) {
+      // 初手は中央
+      if (moveHistory.length === 0) {
+        return [{ x: 7, y: 7, priority: 1000 }];
+      }
+
+      const candidateMap = new Map();
+
+      // 既存の石から距離2以内
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          if (board[y][x] !== EMPTY) {
+            for (let dy = -2; dy <= 2; dy++) {
+              for (let dx = -2; dx <= 2; dx++) {
+                const ny = y + dy;
+                const nx = x + dx;
+                if (ny >= 0 && ny < BOARD_SIZE && nx >= 0 && nx < BOARD_SIZE) {
+                  if (board[ny][nx] === EMPTY) {
+                    const key = `${nx},${ny}`;
+                    if (!candidateMap.has(key)) {
+                      // 優先度を計算
+                      const priority = quickEvaluate(nx, ny);
+                      candidateMap.set(key, { x: nx, y: ny, priority });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 優先度でソートして上位を返す
+      const candidates = Array.from(candidateMap.values());
+      candidates.sort((a, b) => b.priority - a.priority);
+      return candidates.slice(0, maxCandidates);
+    }
+
+    // 高速な優先度評価（候補絞り込み用）
+    function quickEvaluate(x, y) {
+      let score = 0;
+
+      // AI（白）の脅威
+      const myThreats = analyzeThreats(x, y, WHITE);
+      if (myThreats.five > 0) score += 10000000;
+      if (myThreats.openFour > 0) score += 500000;
+      if (myThreats.four > 0) score += 50000;
+      if (myThreats.openThree > 0) score += 10000;
+
+      // 人間（黒）の脅威をブロック
+      const enemyThreats = analyzeThreats(x, y, BLACK);
+      if (enemyThreats.five > 0) score += 9000000;
+      if (enemyThreats.openFour > 0) score += 400000;
+      if (enemyThreats.four > 0) score += 40000;
+      if (enemyThreats.openThree > 0) score += 8000;
+
+      // コンボ検出（四三など）
+      if (myThreats.openFour > 0 && myThreats.openThree > 0) score += 200000;
+      if (myThreats.four >= 2) score += 150000;
+      if (myThreats.openThree >= 2) score += 80000; // 三三
+
+      // 中央ボーナス
+      const dist = Math.abs(x - 7) + Math.abs(y - 7);
+      score += Math.max(0, 14 - dist) * 10;
+
+      return score;
+    }
+
+    // ========================================
+    // Alpha-Beta探索
+    // ========================================
+    
+    function alphaBeta(depth, alpha, beta, isMaximizing, aiPlayer) {
+      // 終端条件
+      if (depth === 0) {
+        const config = AI_CONFIG[aiType];
+        let score = evaluateBoard(aiPlayer);
+        // 性格による攻守バランス調整
+        if (isMaximizing) {
+          score *= config.attackMult;
+        } else {
+          score *= config.defenseMult;
+        }
+        return { score, move: null };
+      }
+
+      const currentPlayer = isMaximizing ? aiPlayer : -aiPlayer;
+      const candidates = generateCandidates(depth > 1 ? 10 : 15);
+
+      if (candidates.length === 0) {
+        return { score: 0, move: null };
+      }
+
+      // 即座の勝敗チェック
+      for (const { x, y } of candidates) {
+        board[y][x] = currentPlayer;
+        const win = checkWin(x, y, currentPlayer);
+        board[y][x] = EMPTY;
+        
+        if (win) {
+          if (isMaximizing) {
+            return { score: PATTERN_SCORES.FIVE * (depth + 1), move: { x, y } };
+          } else {
+            return { score: -PATTERN_SCORES.FIVE * (depth + 1), move: { x, y } };
+          }
+        }
+      }
+
+      let bestMove = candidates[0];
+
+      if (isMaximizing) {
+        let maxScore = -Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentPlayer;
+          const result = alphaBeta(depth - 1, alpha, beta, false, aiPlayer);
+          board[y][x] = EMPTY;
+
+          if (result.score > maxScore) {
+            maxScore = result.score;
+            bestMove = { x, y };
+          }
+          alpha = Math.max(alpha, result.score);
+          if (beta <= alpha) break; // βカット
+        }
+        
+        return { score: maxScore, move: bestMove };
+      } else {
+        let minScore = Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentPlayer;
+          const result = alphaBeta(depth - 1, alpha, beta, true, aiPlayer);
+          board[y][x] = EMPTY;
+
+          if (result.score < minScore) {
+            minScore = result.score;
+            bestMove = { x, y };
+          }
+          beta = Math.min(beta, result.score);
+          if (beta <= alpha) break; // αカット
+        }
+        
+        return { score: minScore, move: bestMove };
+      }
+    }
+
+    // ========================================
+    // 緊急手チェック
+    // ========================================
+    
+    function findEmergencyMove() {
+      const candidates = generateCandidates(30);
+
+      // 1. 自分が勝てる手
+      for (const { x, y } of candidates) {
+        board[y][x] = WHITE;
+        const win = checkWin(x, y, WHITE);
+        board[y][x] = EMPTY;
+        if (win) return { x, y, reason: 'win' };
+      }
+
+      // 2. 相手の5連を阻止
+      for (const { x, y } of candidates) {
+        board[y][x] = BLACK;
+        const lose = checkWin(x, y, BLACK);
+        board[y][x] = EMPTY;
+        if (lose) return { x, y, reason: 'block5' };
+      }
+
+      // 3. 自分の開放四を作る
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreats(x, y, WHITE);
+        if (threats.openFour > 0) return { x, y, reason: 'openFour' };
+      }
+
+      // 4. 相手の開放四を阻止
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreats(x, y, BLACK);
+        if (threats.openFour > 0) return { x, y, reason: 'blockOpenFour' };
+      }
+
+      // 5. 四三などのコンボを作る
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreats(x, y, WHITE);
+        if (threats.four >= 2 || (threats.four > 0 && threats.openThree > 0)) {
+          return { x, y, reason: 'combo' };
+        }
+      }
+
+      // 6. 相手の四三を阻止
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreats(x, y, BLACK);
+        if (threats.four >= 2 || (threats.four > 0 && threats.openThree > 0)) {
+          return { x, y, reason: 'blockCombo' };
+        }
+      }
+
+      return null;
+    }
+
+    // ========================================
+    // メインAI関数
+    // ========================================
+    
+    function aiMove() {
+      const config = AI_CONFIG[aiType];
+
+      // 初手は中央
+      if (moveHistory.length === 0) {
+        isAiThinking = false;
+        makeMove(7, 7);
+        return;
+      }
+
+      // 2手目は中央付近
+      if (moveHistory.length === 1) {
+        const first = moveHistory[0];
+        const offsets = [[1, 1], [-1, -1], [1, -1], [-1, 1], [1, 0], [0, 1]];
+        for (const [dx, dy] of offsets) {
+          const nx = first.x + dx;
+          const ny = first.y + dy;
+          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && board[ny][nx] === EMPTY) {
+            isAiThinking = false;
+            makeMove(nx, ny);
+            return;
+          }
+        }
+      }
+
+      // 最強モード
+      if (aiType === 'ultimate') {
+        // 緊急手チェック（最優先）
+        const emergency = findEmergencyMove();
+        if (emergency) {
+          isAiThinking = false;
+          makeMove(emergency.x, emergency.y);
+          return;
+        }
+
+        // 反復深化で最善手を探索（時間制限2秒）
+        const bestMove = iterativeDeepening(config.depth, 2000);
+        
+        isAiThinking = false;
+        if (bestMove) {
+          makeMove(bestMove.x, bestMove.y);
+        } else {
+          // フォールバック
+          const candidates = generateCandidatesUltimate(10);
+          if (candidates.length > 0) {
+            makeMove(candidates[0].x, candidates[0].y);
+          }
+        }
+        return;
+      }
+
+      // 通常AI（攻撃型・防御型・バランス型）
+      // 緊急手チェック
+      const emergency = findEmergencyMove();
+      if (emergency) {
+        isAiThinking = false;
+        makeMove(emergency.x, emergency.y);
+        return;
+      }
+
+      // Alpha-Beta探索
+      const result = alphaBeta(config.depth, -Infinity, Infinity, true, WHITE);
+      
+      isAiThinking = false;
+      if (result.move) {
+        makeMove(result.move.x, result.move.y);
+      } else {
+        // フォールバック
+        const candidates = generateCandidates(10);
+        if (candidates.length > 0) {
+          makeMove(candidates[0].x, candidates[0].y);
+        }
+      }
+    }
+
+    function getAiDelay() {
+      switch (aiType) {
+        case 'aggressive': return 200;  // 速攻タイプ
+        case 'defensive': return 400;   // 慎重タイプ
+        case 'strategic': return 300;   // バランスタイプ
+        case 'ultimate': return 100;    // 最強（計算に時間がかかるので遅延は最小）
+        default: return 300;
+      }
+    }
+
+    // ========================================
+    // AI vs AI バトル機能
+    // ========================================
+    
+    function startBattle() {
+      if (gameOver) {
+        initBoard();
+      }
+      battleRunning = true;
+      battlePaused = false;
+      updateBattleButtons();
+      runBattle();
+    }
+
+    function pauseBattle() {
+      battlePaused = !battlePaused;
+      document.getElementById('pauseBattleBtn').textContent = battlePaused ? '▶️ 再開' : '⏸️ 一時停止';
+      if (!battlePaused && battleRunning) {
+        runBattle();
+      }
+    }
+
+    function stopBattle() {
+      battleRunning = false;
+      battlePaused = false;
+      if (battleTimeoutId) {
+        clearTimeout(battleTimeoutId);
+        battleTimeoutId = null;
+      }
+      isAiThinking = false;
+      updateBattleButtons();
+      updateStatus();
+    }
+
+    function updateBattleButtons() {
+      document.getElementById('startBattleBtn').disabled = battleRunning && !battlePaused;
+      document.getElementById('pauseBattleBtn').disabled = !battleRunning;
+      document.getElementById('pauseBattleBtn').textContent = battlePaused ? '▶️ 再開' : '⏸️ 一時停止';
+    }
+
+    function runBattle() {
+      if (!battleRunning || battlePaused || gameOver) return;
+
+      isAiThinking = true;
+      updateStatus();
+
+      const speed = parseInt(document.getElementById('battleSpeed').value);
+      
+      battleTimeoutId = setTimeout(() => {
+        if (!battleRunning || battlePaused || gameOver) {
+          isAiThinking = false;
+          return;
+        }
+
+        // 現在のプレイヤーに応じたAIで手を決定
+        const currentAiType = currentPlayer === BLACK ? blackAiType : whiteAiType;
+        const move = calculateAiMove(currentAiType, currentPlayer);
+        
+        isAiThinking = false;
+        
+        if (move) {
+          makeMove(move.x, move.y);
+          
+          // 次の手へ
+          if (!gameOver && battleRunning && !battlePaused) {
+            runBattle();
+          }
+        }
+      }, speed);
+    }
+
+    // 指定されたAIタイプで手を計算
+    function calculateAiMove(type, player) {
+      const config = AI_CONFIG[type];
+
+      // 初手は中央
+      if (moveHistory.length === 0) {
+        return { x: 7, y: 7 };
+      }
+
+      // 2手目は中央付近
+      if (moveHistory.length === 1) {
+        const first = moveHistory[0];
+        const offsets = [[1, 1], [-1, -1], [1, -1], [-1, 1], [1, 0], [0, 1]];
+        for (const [dx, dy] of offsets) {
+          const nx = first.x + dx;
+          const ny = first.y + dy;
+          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && board[ny][nx] === EMPTY) {
+            return { x: nx, y: ny };
+          }
+        }
+      }
+
+      // 緊急手チェック
+      const emergency = findEmergencyMoveForPlayer(player);
+      if (emergency) {
+        return emergency;
+      }
+
+      // 最強モード
+      if (type === 'ultimate') {
+        currentHash = computeHash();
+        return iterativeDeepeningForPlayer(config.depth, 2000, player);
+      }
+
+      // 通常AI
+      const result = alphaBetaForPlayer(config.depth, -Infinity, Infinity, true, player, config);
+      return result.move;
+    }
+
+    // プレイヤー指定版の緊急手チェック
+    function findEmergencyMoveForPlayer(player) {
+      const enemy = -player;
+      const candidates = generateCandidates(30);
+
+      // 1. 自分が勝てる手
+      for (const { x, y } of candidates) {
+        board[y][x] = player;
+        const win = checkWin(x, y, player);
+        board[y][x] = EMPTY;
+        if (win) return { x, y };
+      }
+
+      // 2. 相手の5連を阻止
+      for (const { x, y } of candidates) {
+        board[y][x] = enemy;
+        const lose = checkWin(x, y, enemy);
+        board[y][x] = EMPTY;
+        if (lose) return { x, y };
+      }
+
+      // 3. 自分の開放四を作る
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsForPlayer(x, y, player);
+        if (threats.openFour > 0) return { x, y };
+      }
+
+      // 4. 相手の開放四を阻止
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsForPlayer(x, y, enemy);
+        if (threats.openFour > 0) return { x, y };
+      }
+
+      // 5. コンボを作る
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsForPlayer(x, y, player);
+        if (threats.four >= 2 || (threats.four > 0 && threats.openThree > 0)) {
+          return { x, y };
+        }
+      }
+
+      // 6. 相手のコンボを阻止
+      for (const { x, y } of candidates) {
+        const threats = analyzeThreatsForPlayer(x, y, enemy);
+        if (threats.four >= 2 || (threats.four > 0 && threats.openThree > 0)) {
+          return { x, y };
+        }
+      }
+
+      return null;
+    }
+
+    // プレイヤー指定版の脅威分析
+    function analyzeThreatsForPlayer(x, y, player) {
+      const threats = {
+        five: 0,
+        openFour: 0,
+        four: 0,
+        openThree: 0,
+        three: 0
+      };
+
+      board[y][x] = player;
+
+      for (const [dx, dy] of DIRECTIONS) {
+        const result = analyzeLinePattern(x, y, dx, dy, player);
+        if (result.count >= 5) threats.five++;
+        else if (result.count === 4 && result.openEnds === 2) threats.openFour++;
+        else if (result.count === 4 && result.openEnds === 1) threats.four++;
+        else if (result.count === 3 && result.openEnds === 2) threats.openThree++;
+        else if (result.count === 3 && result.openEnds === 1) threats.three++;
+      }
+
+      board[y][x] = EMPTY;
+      return threats;
+    }
+
+    // プレイヤー指定版のAlpha-Beta
+    function alphaBetaForPlayer(depth, alpha, beta, isMaximizing, aiPlayer, config) {
+      if (depth === 0) {
+        let score = evaluateBoard(aiPlayer);
+        if (isMaximizing) {
+          score *= config.attackMult;
+        } else {
+          score *= config.defenseMult;
+        }
+        return { score, move: null };
+      }
+
+      const currentP = isMaximizing ? aiPlayer : -aiPlayer;
+      const candidates = generateCandidates(depth > 1 ? 10 : 15);
+
+      if (candidates.length === 0) {
+        return { score: 0, move: null };
+      }
+
+      // 即座の勝敗チェック
+      for (const { x, y } of candidates) {
+        board[y][x] = currentP;
+        const win = checkWin(x, y, currentP);
+        board[y][x] = EMPTY;
+        
+        if (win) {
+          if (isMaximizing) {
+            return { score: PATTERN_SCORES.FIVE * (depth + 1), move: { x, y } };
+          } else {
+            return { score: -PATTERN_SCORES.FIVE * (depth + 1), move: { x, y } };
+          }
+        }
+      }
+
+      let bestMove = candidates[0];
+
+      if (isMaximizing) {
+        let maxScore = -Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentP;
+          const result = alphaBetaForPlayer(depth - 1, alpha, beta, false, aiPlayer, config);
+          board[y][x] = EMPTY;
+
+          if (result.score > maxScore) {
+            maxScore = result.score;
+            bestMove = { x, y };
+          }
+          alpha = Math.max(alpha, result.score);
+          if (beta <= alpha) break;
+        }
+        
+        return { score: maxScore, move: bestMove };
+      } else {
+        let minScore = Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentP;
+          const result = alphaBetaForPlayer(depth - 1, alpha, beta, true, aiPlayer, config);
+          board[y][x] = EMPTY;
+
+          if (result.score < minScore) {
+            minScore = result.score;
+            bestMove = { x, y };
+          }
+          beta = Math.min(beta, result.score);
+          if (beta <= alpha) break;
+        }
+        
+        return { score: minScore, move: bestMove };
+      }
+    }
+
+    // プレイヤー指定版の反復深化
+    function iterativeDeepeningForPlayer(maxDepth, timeLimit, player) {
+      const startTime = Date.now();
+      let bestMove = null;
+      let bestScore = -Infinity;
+      
+      if (moveHistory.length <= 2) {
+        transpositionTable.clear();
+      }
+      
+      currentHash = computeHash();
+      
+      for (let depth = 2; depth <= maxDepth; depth += 2) {
+        const result = alphaBetaUltimateForPlayer(depth, -Infinity, Infinity, true, player);
+        
+        if (result.move) {
+          bestMove = result.move;
+          bestScore = result.score;
+        }
+        
+        if (Date.now() - startTime > timeLimit) break;
+        if (bestScore >= PATTERN_SCORES.FIVE) break;
+      }
+      
+      return bestMove;
+    }
+
+    // プレイヤー指定版の最強Alpha-Beta
+    function alphaBetaUltimateForPlayer(depth, alpha, beta, isMaximizing, aiPlayer) {
+      const hash = computeHash();
+      
+      const ttEntry = probeTT(hash, depth, alpha, beta);
+      if (ttEntry && ttEntry.score !== undefined) {
+        return { score: ttEntry.score, move: ttEntry.bestMove };
+      }
+      
+      if (depth === 0) {
+        return { score: evaluateBoardUltimate(aiPlayer), move: null };
+      }
+
+      const currentP = isMaximizing ? aiPlayer : -aiPlayer;
+      
+      let candidates = generateCandidatesUltimate(depth > 2 ? 12 : 18);
+      
+      if (ttEntry && ttEntry.bestMove) {
+        const ttMove = ttEntry.bestMove;
+        candidates = candidates.filter(c => c.x !== ttMove.x || c.y !== ttMove.y);
+        candidates.unshift(ttMove);
+      }
+
+      if (candidates.length === 0) {
+        return { score: 0, move: null };
+      }
+
+      for (const { x, y } of candidates) {
+        board[y][x] = currentP;
+        const win = checkWin(x, y, currentP);
+        board[y][x] = EMPTY;
+        
+        if (win) {
+          const winScore = PATTERN_SCORES.FIVE * (depth + 1);
+          return { 
+            score: isMaximizing ? winScore : -winScore, 
+            move: { x, y } 
+          };
+        }
+      }
+
+      let bestMove = candidates[0];
+      let ttFlag = TT_UPPER;
+
+      if (isMaximizing) {
+        let maxScore = -Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentP;
+          updateHash(x, y, currentP);
+          
+          const result = alphaBetaUltimateForPlayer(depth - 1, alpha, beta, false, aiPlayer);
+          
+          board[y][x] = EMPTY;
+          updateHash(x, y, currentP);
+
+          if (result.score > maxScore) {
+            maxScore = result.score;
+            bestMove = { x, y };
+          }
+          
+          alpha = Math.max(alpha, result.score);
+          if (beta <= alpha) {
+            ttFlag = TT_LOWER;
+            break;
+          }
+        }
+        
+        if (maxScore > -Infinity) {
+          storeTT(hash, depth, maxScore, alpha === maxScore ? TT_EXACT : ttFlag, bestMove);
+        }
+        return { score: maxScore, move: bestMove };
+        
+      } else {
+        let minScore = Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = currentP;
+          updateHash(x, y, currentP);
+          
+          const result = alphaBetaUltimateForPlayer(depth - 1, alpha, beta, true, aiPlayer);
+          
+          board[y][x] = EMPTY;
+          updateHash(x, y, currentP);
+
+          if (result.score < minScore) {
+            minScore = result.score;
+            bestMove = { x, y };
+          }
+          
+          beta = Math.min(beta, result.score);
+          if (beta <= alpha) {
+            ttFlag = TT_LOWER;
+            break;
+          }
+        }
+        
+        if (minScore < Infinity) {
+          storeTT(hash, depth, minScore, beta === minScore ? TT_EXACT : ttFlag, bestMove);
+        }
+        return { score: minScore, move: bestMove };
+      }
+    }
+
+    // ========================================
+    // UI Updates
+    // ========================================
+    function updateStatus() {
+      const status = document.getElementById('status');
+      if (gameOver) {
+        status.textContent = 'ゲーム終了';
+      } else if (isAiThinking) {
+        if (gameMode === 'aivai') {
+          const aiName = currentPlayer === BLACK ? getAiName(blackAiType) : getAiName(whiteAiType);
+          status.textContent = `${currentPlayer === BLACK ? '⚫' : '⚪'} ${aiName} 思考中...`;
+        } else if (aiType === 'ultimate') {
+          status.textContent = '👹 最強AI 深く思考中...';
+        } else {
+          status.textContent = 'AI思考中...';
+        }
+      } else {
+        if (gameMode === 'aivai') {
+          const aiName = currentPlayer === BLACK ? getAiName(blackAiType) : getAiName(whiteAiType);
+          status.textContent = `${currentPlayer === BLACK ? '⚫' : '⚪'} ${aiName} の番`;
+        } else {
+          status.textContent = currentPlayer === BLACK ? '黒の番です' : '白の番です';
+        }
+      }
+    }
+
+    function getAiName(type) {
+      switch (type) {
+        case 'aggressive': return '🔥攻撃型';
+        case 'defensive': return '🛡️防御型';
+        case 'strategic': return '⚖️バランス型';
+        case 'ultimate': return '👹最強';
+        default: return type;
+      }
+    }
+
+    function showWinner(player) {
+      const overlay = document.getElementById('winnerOverlay');
+      const stone = document.getElementById('winnerStone');
+      const text = document.getElementById('winnerText');
+
+      stone.className = 'stone-icon ' + (player === BLACK ? 'black' : 'white');
+      
+      if (gameMode === 'aivai') {
+        const winnerAi = player === BLACK ? getAiName(blackAiType) : getAiName(whiteAiType);
+        const loserAi = player === BLACK ? getAiName(whiteAiType) : getAiName(blackAiType);
+        text.textContent = `${winnerAi} の勝ち！`;
+      } else if (gameMode === 'ai') {
+        text.textContent = player === BLACK ? 'あなたの勝ち！' : 'AIの勝ち！';
+      } else {
+        text.textContent = player === BLACK ? '黒の勝ち！' : '白の勝ち！';
+      }
+
+      if (player === BLACK) {
+        scores.black++;
+      } else {
+        scores.white++;
+      }
+      updateScores();
+
+      // AI同士モードの場合、バトルを停止
+      if (gameMode === 'aivai') {
+        stopBattle();
+      }
+
+      overlay.classList.add('visible');
+    }
+
+    function showDraw() {
+      const overlay = document.getElementById('winnerOverlay');
+      const stone = document.getElementById('winnerStone');
+      const text = document.getElementById('winnerText');
+
+      stone.className = 'stone-icon';
+      stone.style.background = 'linear-gradient(90deg, #1a1a1a 50%, #fff 50%)';
+      text.textContent = '引き分け！';
+
+      overlay.classList.add('visible');
+    }
+
+    function updateScores() {
+      document.getElementById('blackScore').textContent = scores.black;
+      document.getElementById('whiteScore').textContent = scores.white;
+    }
+
+    // ========================================
+    // Event Handlers
+    // ========================================
+    function getGridPosition(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      
+      const gridX = Math.round((x - padding) / cellSize);
+      const gridY = Math.round((y - padding) / cellSize);
+      
+      return { x: gridX, y: gridY };
+    }
+
+    canvas.addEventListener('click', (e) => {
+      if (gameOver || isAiThinking) return;
+      if (gameMode === 'ai' && currentPlayer === WHITE) return;
+
+      const pos = getGridPosition(e.clientX, e.clientY);
+      makeMove(pos.x, pos.y);
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (gameOver || isAiThinking) return;
+      if (gameMode === 'ai' && currentPlayer === WHITE) return;
+
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      const pos = getGridPosition(touch.clientX, touch.clientY);
+      makeMove(pos.x, pos.y);
+    });
+
+    // Mode buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        gameMode = btn.dataset.mode;
+        
+        document.getElementById('aiTypes').classList.toggle('visible', gameMode === 'ai');
+        document.getElementById('aiVsAiSelector').classList.toggle('visible', gameMode === 'aivai');
+        document.getElementById('battleControls').classList.toggle('visible', gameMode === 'aivai');
+        
+        stopBattle();
+        initBoard();
+      });
+    });
+
+    // AI type buttons
+    document.querySelectorAll('.ai-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.ai-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        aiType = btn.dataset.ai;
+        initBoard();
+      });
+    });
+
+    // Control buttons
+    document.getElementById('undoBtn').addEventListener('click', undoMove);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      stopBattle();
+      initBoard();
+    });
+    document.getElementById('playAgainBtn').addEventListener('click', () => {
+      document.getElementById('winnerOverlay').classList.remove('visible');
+      initBoard();
+    });
+
+    // AI vs AI selector buttons
+    document.querySelectorAll('#blackAiButtons .ai-select-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#blackAiButtons .ai-select-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        blackAiType = btn.dataset.ai;
+      });
+    });
+
+    document.querySelectorAll('#whiteAiButtons .ai-select-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#whiteAiButtons .ai-select-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        whiteAiType = btn.dataset.ai;
+      });
+    });
+
+    // Battle control buttons
+    document.getElementById('startBattleBtn').addEventListener('click', startBattle);
+    document.getElementById('pauseBattleBtn').addEventListener('click', pauseBattle);
+    document.getElementById('stopBattleBtn').addEventListener('click', () => {
+      stopBattle();
+      initBoard();
+    });
+
+    // Window resize
+    window.addEventListener('resize', () => {
+      initCanvas();
+      render();
+    });
+
+    // ========================================
+    // Initialize
+    // ========================================
+    initCanvas();
+    initBoard();
+  </script>
+</body>
+</html>
