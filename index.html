@@ -485,7 +485,7 @@
 
   <script>
     // ========================================
-    // Worker Code (文字列として定義)
+    // Worker Code
     // ========================================
     const workerCode = `
       const BOARD_SIZE = 15;
@@ -509,67 +509,24 @@
       };
 
       const PATTERN_DICT = {
-        // 五連（勝ち）
         'XXXXX': 10000000,
-        
-        // 開放四（次で勝ち確定）
-        '_XXXX_': 5000000,
-        
-        // 四（片側閉じ）
-        'XXXX_': 500000,
-        '_XXXX': 500000,
-        'OXXXX_': 500000,
-        '_XXXXO': 500000,
-        
-        // 飛び四（1つ空きがある四）
-        'XXX_X': 400000,
-        'XX_XX': 400000,
-        'X_XXX': 400000,
-        '_XXX_X': 400000,
-        'X_XXX_': 400000,
-        '_XX_XX': 400000,
-        'XX_XX_': 400000,
-        
-        // 開放三（両側空き - 非常に危険）
+        '_XXXX_': 500000,
+        'XXXX_': 100000,
+        '_XXXX': 100000,
+        'XXX_X': 80000,
+        'XX_XX': 80000,
+        'X_XXX': 80000,
         '_XXX_': 50000,
-        '__XXX__': 50000,
-        
-        // 飛び三（開放）
-        '_XX_X_': 40000,
-        '_X_XX_': 40000,
-        '_X_X_X_': 30000,
-        
-        // 片三
         'XXX__': 8000,
         '__XXX': 8000,
-        'OXXX__': 8000,
-        '__XXXO': 8000,
-        
-        // 飛び三（片）
-        'XX__X': 6000,
-        'X__XX': 6000,
-        'XX_X_': 6000,
-        '_X_XX': 6000,
-        'X_X_X': 5000,
-        
-        // 開放二
+        '_XX_X_': 40000,
+        '_X_XX_': 40000,
+        'XX__X': 5000,
+        'X__XX': 5000,
         '_XX_': 3000,
-        '__XX__': 3000,
-        '_XX__': 2000,
-        '__XX_': 2000,
-        
-        // 飛び二
-        '_X_X_': 2500,
-        'X__X': 1500,
-        
-        // 片二
         'XX___': 500,
         '___XX': 500,
-        'OXX___': 500,
-        '___XXO': 500,
-        
-        // 単石（中央寄りボーナスで補完）
-        '_X_': 100,
+        '_X_X_': 2000,
       };
 
       const AI_CONFIG = {
@@ -580,39 +537,6 @@
       };
 
       let board = [];
-      let transpositionTable = new Map();
-      const MAX_TT_SIZE = 50000;
-
-      // Zobrist (Worker内で初期化)
-      let zobristTable = [];
-      function initZobrist(seed) {
-        // シード付き乱数
-        let s = seed;
-        const rand = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s; };
-        
-        zobristTable = [];
-        for (let y = 0; y < BOARD_SIZE; y++) {
-          zobristTable[y] = [];
-          for (let x = 0; x < BOARD_SIZE; x++) {
-            zobristTable[y][x] = {
-              [BLACK]: rand(),
-              [WHITE]: rand()
-            };
-          }
-        }
-      }
-
-      function computeHash() {
-        let hash = 0;
-        for (let y = 0; y < BOARD_SIZE; y++) {
-          for (let x = 0; x < BOARD_SIZE; x++) {
-            if (board[y][x] !== EMPTY) {
-              hash ^= zobristTable[y][x][board[y][x]];
-            }
-          }
-        }
-        return hash;
-      }
 
       function checkWin(x, y, player) {
         for (const [dx, dy] of DIRECTIONS) {
@@ -670,59 +594,35 @@
       function evaluateBoard(player) {
         let score = 0;
         const enemy = -player;
-        
-        // ライン評価
         for (let y = 0; y < BOARD_SIZE; y++) {
           score += evaluateLinePatterns(0, y, 1, 0, player);
-          score -= evaluateLinePatterns(0, y, 1, 0, enemy) * 1.2;
+          score -= evaluateLinePatterns(0, y, 1, 0, enemy) * 1.1;
         }
         for (let x = 0; x < BOARD_SIZE; x++) {
           score += evaluateLinePatterns(x, 0, 0, 1, player);
-          score -= evaluateLinePatterns(x, 0, 0, 1, enemy) * 1.2;
+          score -= evaluateLinePatterns(x, 0, 0, 1, enemy) * 1.1;
         }
         for (let x = 0; x < BOARD_SIZE; x++) {
           score += evaluateLinePatterns(x, 0, 1, 1, player);
-          score -= evaluateLinePatterns(x, 0, 1, 1, enemy) * 1.2;
+          score -= evaluateLinePatterns(x, 0, 1, 1, enemy) * 1.1;
         }
         for (let y = 1; y < BOARD_SIZE; y++) {
           score += evaluateLinePatterns(0, y, 1, 1, player);
-          score -= evaluateLinePatterns(0, y, 1, 1, enemy) * 1.2;
+          score -= evaluateLinePatterns(0, y, 1, 1, enemy) * 1.1;
         }
         for (let x = 0; x < BOARD_SIZE; x++) {
           score += evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, player);
-          score -= evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, enemy) * 1.2;
+          score -= evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, enemy) * 1.1;
         }
         for (let y = 0; y < BOARD_SIZE - 1; y++) {
           score += evaluateLinePatterns(0, y, 1, -1, player);
-          score -= evaluateLinePatterns(0, y, 1, -1, enemy) * 1.2;
+          score -= evaluateLinePatterns(0, y, 1, -1, enemy) * 1.1;
         }
-        
-        // 中央制圧ボーナス（強化）
-        for (let y = 4; y <= 10; y++) {
-          for (let x = 4; x <= 10; x++) {
-            if (board[y][x] === player) {
-              const centerDist = Math.abs(x - 7) + Math.abs(y - 7);
-              score += (7 - centerDist) * 50 + 100;
-            }
+        for (let y = 5; y <= 9; y++) {
+          for (let x = 5; x <= 9; x++) {
+            if (board[y][x] === player) score += 100;
           }
         }
-        
-        // 連結ボーナス（石が繋がっているほど有利）
-        for (let y = 0; y < BOARD_SIZE; y++) {
-          for (let x = 0; x < BOARD_SIZE; x++) {
-            if (board[y][x] === player) {
-              let connections = 0;
-              for (const [dx, dy] of DIRECTIONS) {
-                const nx = x + dx, ny = y + dy;
-                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
-                  if (board[ny][nx] === player) connections++;
-                }
-              }
-              score += connections * 30;
-            }
-          }
-        }
-        
         return score;
       }
 
@@ -767,51 +667,20 @@
         let score = 0;
         const enemy = -player;
         const myThreats = analyzeThreats(x, y, player);
-        const enemyThreats = analyzeThreats(x, y, enemy);
-        
-        // 即勝ち
         if (myThreats.five > 0) return 100000000;
-        
-        // 相手の即勝ちを防ぐ
-        if (enemyThreats.five > 0) return 90000000;
-        
-        // 自分の開放四（ほぼ勝ち確定）
-        if (myThreats.openFour > 0) return 80000000;
-        
-        // 相手の開放四を防ぐ
-        if (enemyThreats.openFour > 0) return 70000000;
-        
-        // 自分の四三（勝ち確定コンボ）
-        if (myThreats.four > 0 && myThreats.openThree > 0) return 60000000;
-        
-        // 自分の双四（勝ち確定コンボ）
-        if (myThreats.four >= 2) return 55000000;
-        
-        // 相手の四三を防ぐ
-        if (enemyThreats.four > 0 && enemyThreats.openThree > 0) return 50000000;
-        
-        // 相手の双四を防ぐ
-        if (enemyThreats.four >= 2) return 45000000;
-        
-        // 自分の双三（強い攻め）
-        if (myThreats.openThree >= 2) return 40000000;
-        
-        // 相手の双三を防ぐ
-        if (enemyThreats.openThree >= 2) return 35000000;
-        
-        // 通常の評価
+        if (myThreats.openFour > 0) score += 5000000;
         if (myThreats.four > 0) score += 500000;
         if (myThreats.openThree > 0) score += 50000;
-        if (myThreats.three > 0) score += 5000;
-        
+        const enemyThreats = analyzeThreats(x, y, enemy);
+        if (enemyThreats.five > 0) return 90000000;
+        if (enemyThreats.openFour > 0) score += 4000000;
         if (enemyThreats.four > 0) score += 400000;
         if (enemyThreats.openThree > 0) score += 40000;
-        if (enemyThreats.three > 0) score += 4000;
-        
-        // 中央ボーナス
+        if (myThreats.openFour > 0 && myThreats.openThree > 0) score += 2000000;
+        if (myThreats.four >= 2) score += 1500000;
+        if (myThreats.openThree >= 2) score += 800000;
         const dist = Math.abs(x - 7) + Math.abs(y - 7);
-        score += (14 - dist) * 100;
-        
+        score += (14 - dist) * 50;
         return score;
       }
 
@@ -824,7 +693,6 @@
 
         const currentPlayer = isMaximizing ? aiPlayer : -aiPlayer;
 
-        // 即座の勝敗チェック
         for (const { x, y } of candidates) {
           board[y][x] = currentPlayer;
           const win = checkWin(x, y, currentPlayer);
@@ -874,7 +742,6 @@
         const candidateSet = new Set();
         const newCandidates = [];
 
-        // 新しい手の周囲を追加
         for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
             const ny = lastY + dy, nx = lastX + dx;
@@ -888,7 +755,6 @@
           }
         }
 
-        // 親の候補もマージ（打った手以外）
         for (const c of parentCandidates) {
           if (board[c.y][c.x] === EMPTY) {
             const key = c.x + ',' + c.y;
@@ -900,27 +766,21 @@
         }
 
         newCandidates.sort((a, b) => b.priority - a.priority);
-        return newCandidates.slice(0, 15);
+        return newCandidates.slice(0, 12);
       }
 
-      // メッセージ受信
       self.onmessage = function(e) {
-        const { candidates, boardData, aiPlayer, aiType, workerId, zobristSeed } = e.data;
+        const { candidates, boardData, aiPlayer, aiType, workerId } = e.data;
         
-        // 初期化
         board = boardData.map(row => [...row]);
-        initZobrist(zobristSeed);
-        transpositionTable.clear();
 
         const config = AI_CONFIG[aiType];
         let bestMove = null;
         let bestScore = -Infinity;
 
-        // 担当する候補手を探索
         for (const candidate of candidates) {
           board[candidate.y][candidate.x] = aiPlayer;
           
-          // この手を打った後の子候補を生成
           const childCandidates = generateChildCandidates(candidate.x, candidate.y, candidates);
           
           const result = alphaBeta(
@@ -973,18 +833,15 @@
     let battlePaused = false;
     let battleTimeoutId = null;
 
-    // Workers
     let workers = [];
     let workerResults = [];
     let pendingWorkers = 0;
     let currentAiResolve = null;
-    const zobristSeed = 12345; // 全Workerで同じシード
 
     // ========================================
     // Worker Setup
     // ========================================
     function initWorkers() {
-      // 既存のワーカーを終了
       workers.forEach(w => w.terminate());
       workers = [];
 
@@ -1006,7 +863,6 @@
       pendingWorkers--;
 
       if (pendingWorkers === 0 && currentAiResolve) {
-        // 全Workerの結果から最善手を選択
         let best = workerResults[0];
         for (const result of workerResults) {
           if (result.bestScore > best.bestScore) {
@@ -1020,11 +876,8 @@
 
     function setWorkerActive(id, active) {
       const el = document.getElementById('worker' + id);
-      if (active) {
-        el.classList.add('active');
-      } else {
-        el.classList.remove('active');
-      }
+      if (active) el.classList.add('active');
+      else el.classList.remove('active');
     }
 
     // ========================================
@@ -1260,17 +1113,15 @@
       return candidates.slice(0, 24);
     }
 
-    function quickEvaluate(x, y, player = WHITE) {
+    function quickEvaluate(x, y) {
       let score = 0;
       
-      // 即勝ち/即負けチェック
-      board[y][x] = player;
-      if (checkWin(x, y, player)) { board[y][x] = EMPTY; return 100000000; }
-      board[y][x] = -player;
-      if (checkWin(x, y, -player)) { board[y][x] = EMPTY; return 90000000; }
+      board[y][x] = WHITE;
+      if (checkWin(x, y, WHITE)) { board[y][x] = EMPTY; return 100000000; }
+      board[y][x] = BLACK;
+      if (checkWin(x, y, BLACK)) { board[y][x] = EMPTY; return 90000000; }
       board[y][x] = EMPTY;
 
-      // 中央ボーナス
       const dist = Math.abs(x - 7) + Math.abs(y - 7);
       score += (14 - dist) * 50;
       
@@ -1281,7 +1132,6 @@
       const enemy = -player;
       const candidates = generateCandidates();
 
-      // 即勝ち
       for (const { x, y } of candidates) {
         board[y][x] = player;
         const win = checkWin(x, y, player);
@@ -1289,7 +1139,6 @@
         if (win) return { x, y };
       }
 
-      // 即負け防止
       for (const { x, y } of candidates) {
         board[y][x] = enemy;
         const lose = checkWin(x, y, enemy);
@@ -1301,7 +1150,6 @@
     }
 
     async function calculateAiMoveParallel(type, player) {
-      // 初手・2手目
       if (moveHistory.length === 0) {
         return { x: 7, y: 7 };
       }
@@ -1316,16 +1164,13 @@
         }
       }
 
-      // 緊急手チェック
       const emergency = findEmergencyMove(player);
       if (emergency) return emergency;
 
-      // 候補手を生成
       const candidates = generateCandidates();
       if (candidates.length === 0) return null;
       if (candidates.length === 1) return candidates[0];
 
-      // 候補をWorkerに分配
       const chunkSize = Math.ceil(candidates.length / NUM_WORKERS);
       workerResults = [];
       pendingWorkers = NUM_WORKERS;
@@ -1356,8 +1201,7 @@
             boardData: board.map(row => [...row]),
             aiPlayer: player,
             aiType: type,
-            workerId: i,
-            zobristSeed: zobristSeed
+            workerId: i
           });
         }
       });
@@ -1367,45 +1211,12 @@
       isAiThinking = true;
       updateStatus();
 
-      let move;
-      if (aiType === 'ultimate') {
-        // 最強のみWorker並列
-        move = await calculateAiMoveParallel(aiType, WHITE);
-      } else {
-        // 他はメインスレッドで計算
-        move = calculateAiMoveSimple(aiType, WHITE);
-      }
+      const move = await calculateAiMoveParallel(aiType, WHITE);
       
       isAiThinking = false;
       if (move && !gameOver) {
         makeMove(move.x, move.y);
       }
-    }
-
-    // 最強以外用のシンプルなAI（メインスレッド）
-    function calculateAiMoveSimple(type, player) {
-      if (moveHistory.length === 0) {
-        return { x: 7, y: 7 };
-      }
-      if (moveHistory.length === 1) {
-        const first = moveHistory[0];
-        const offsets = [[1, 1], [-1, -1], [1, -1], [-1, 1], [1, 0], [0, 1]];
-        for (const [dx, dy] of offsets) {
-          const nx = first.x + dx, ny = first.y + dy;
-          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && board[ny][nx] === EMPTY) {
-            return { x: nx, y: ny };
-          }
-        }
-      }
-
-      const emergency = findEmergencyMove(player);
-      if (emergency) return emergency;
-
-      const candidates = generateCandidates();
-      if (candidates.length === 0) return null;
-      
-      // 一番優先度の高い手を返す
-      return candidates[0];
     }
 
     // ========================================
@@ -1450,15 +1261,7 @@
       updateStatus();
 
       const currentAiType = currentPlayer === BLACK ? blackAiType : whiteAiType;
-      
-      let move;
-      if (currentAiType === 'ultimate') {
-        // 最強のみWorker並列
-        move = await calculateAiMoveParallel(currentAiType, currentPlayer);
-      } else {
-        // 他はメインスレッドで計算
-        move = calculateAiMoveSimple(currentAiType, currentPlayer);
-      }
+      const move = await calculateAiMoveParallel(currentAiType, currentPlayer);
 
       isAiThinking = false;
 
@@ -1580,7 +1383,6 @@
       makeMove(pos.x, pos.y);
     });
 
-    // Mode buttons
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
@@ -1597,7 +1399,6 @@
       });
     });
 
-    // AI type buttons
     document.querySelectorAll('.ai-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.ai-btn').forEach(b => b.classList.remove('active'));
@@ -1607,7 +1408,6 @@
       });
     });
 
-    // AI vs AI selector buttons
     document.querySelectorAll('#blackAiButtons .ai-select-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('#blackAiButtons .ai-select-btn').forEach(b => b.classList.remove('active'));
@@ -1624,7 +1424,6 @@
       });
     });
 
-    // Battle control buttons
     document.getElementById('startBattleBtn').addEventListener('click', startBattle);
     document.getElementById('pauseBattleBtn').addEventListener('click', pauseBattle);
     document.getElementById('stopBattleBtn').addEventListener('click', () => {
@@ -1632,7 +1431,6 @@
       initBoard();
     });
 
-    // Control buttons
     document.getElementById('undoBtn').addEventListener('click', undoMove);
     document.getElementById('resetBtn').addEventListener('click', () => {
       stopBattle();
@@ -1643,7 +1441,6 @@
       initBoard();
     });
 
-    // Window resize
     window.addEventListener('resize', () => {
       initCanvas();
       render();
