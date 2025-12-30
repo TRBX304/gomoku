@@ -1052,7 +1052,7 @@
             board[y][x] = aiPlayer;
             if (checkWin(x, y, aiPlayer)) {
               board[y][x] = EMPTY;
-              self.postMessage({ workerId, bestMove: { x, y }, bestScore: 1 });
+              self.postMessage({ workerId, bestMove: { x, y, reason: '即勝利(五連)' }, bestScore: 1 });
               return;
             }
             board[y][x] = EMPTY;
@@ -1062,6 +1062,7 @@
           // maxForcingMoves=7: 四→防御→四→防御→四→防御→五 を読む
           const forcedWin = findForcedWinSelective(aiPlayer, candidates, 7, new Set());
           if (forcedWin) {
+            forcedWin.reason = '強制勝利(' + (forcedWin.type || '詰み') + ')';
             self.postMessage({ workerId, bestMove: forcedWin, bestScore: 1 });
             return;
           }
@@ -1069,7 +1070,7 @@
           // 【手順3】相手の即勝利阻止
           for (const { x, y } of candidates) {
             if (checkImmediateWin(x, y, enemy).win) {
-              self.postMessage({ workerId, bestMove: { x, y }, bestScore: 1 });
+              self.postMessage({ workerId, bestMove: { x, y, reason: '相手即勝利阻止' }, bestScore: 1 });
               return;
             }
           }
@@ -1083,13 +1084,14 @@
             board[y][x] = EMPTY;
             
             if (enemyWin) {
-              self.postMessage({ workerId, bestMove: { x, y }, bestScore: 1 });
+              self.postMessage({ workerId, bestMove: { x, y, reason: '相手強制勝利阻止' }, bestScore: 1 });
               return;
             }
           }
 
           // 【手順5】勝ちも負けも無い場合：最も敗北を遅らせる手
           const fallbackMove = findBestFallbackMove(aiPlayer, candidates);
+          fallbackMove.reason = 'フォールバック(最善防御)';
           self.postMessage({ workerId, bestMove: fallbackMove, bestScore: 1 });
           return;
         }
@@ -1100,12 +1102,14 @@
         
         const immediateWin = findImmediateWinSimple(aiPlayer, candidates);
         if (immediateWin) {
+          immediateWin.reason = '即勝利';
           self.postMessage({ workerId, bestMove: immediateWin, bestScore: 1 });
           return;
         }
 
         const block = findBlockSimple(aiPlayer, candidates);
         if (block) {
+          block.reason = '相手阻止';
           self.postMessage({ workerId, bestMove: block, bestScore: 1 });
           return;
         }
@@ -1113,6 +1117,7 @@
         if (level === 3) {
           const forcedWin = findForcedWinSelective(aiPlayer, candidates, 4, new Set());
           if (forcedWin) {
+            forcedWin.reason = '強制勝利';
             self.postMessage({ workerId, bestMove: forcedWin, bestScore: 1 });
             return;
           }
@@ -1121,19 +1126,23 @@
         if (level >= 2) {
           const fourMove = findFourMove(aiPlayer, candidates);
           if (fourMove) {
+            fourMove.reason = '四を作る';
             self.postMessage({ workerId, bestMove: fourMove, bestScore: 1 });
             return;
           }
           
           const threeMove = findOpenThreeMove(aiPlayer, candidates);
           if (threeMove) {
+            threeMove.reason = '開放三を作る';
             self.postMessage({ workerId, bestMove: threeMove, bestScore: 1 });
             return;
           }
         }
 
         const connectedMove = findConnectedMove(aiPlayer, candidates);
-        self.postMessage({ workerId, bestMove: connectedMove || candidates[0], bestScore: 1 });
+        const finalMove = connectedMove || candidates[0];
+        if (finalMove) finalMove.reason = '連結手';
+        self.postMessage({ workerId, bestMove: finalMove, bestScore: 1 });
       };
     `;
 
@@ -1337,6 +1346,23 @@
       updateStatus();
       render();
       
+      // ========================================
+      // 研究用ログ: ゲーム開始
+      // ========================================
+      const modeNames = { pvp: 'PvP', ai: 'vs AI', aivai: 'AI vs AI' };
+      const levelNames = { 1: 'Lv1(入門)', 2: 'Lv2(初級)', 3: 'Lv3(中級)', 4: 'Lv4(最強)' };
+      console.log('%c========================================', 'color: #06c;');
+      console.log('%c新規ゲーム開始', 'color: #06c; font-weight: bold; font-size: 14px;');
+      console.log('モード:', modeNames[gameMode] || gameMode);
+      if (gameMode === 'ai') {
+        console.log('AIレベル:', levelNames[selectedLevel] || selectedLevel);
+        console.log('プレイヤー:', humanPlayer === BLACK ? '先手(黒)' : '後手(白)');
+      } else if (gameMode === 'aivai') {
+        console.log('黒AI:', levelNames[blackAiLevel] || blackAiLevel);
+        console.log('白AI:', levelNames[whiteAiLevel] || whiteAiLevel);
+      }
+      console.log('%c========================================', 'color: #06c;');
+      
       // AI対戦で後手（白）を選んだ場合、AIが先に打つ
       if (gameMode === 'ai' && humanPlayer === WHITE) {
         triggerAiMove();
@@ -1347,17 +1373,43 @@
       return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE && board[y][x] === EMPTY;
     }
 
-    function makeMove(x, y) {
+    function makeMove(x, y, aiReason) {
       if (!isValidMove(x, y) || gameOver || isAiThinking) return false;
 
       board[y][x] = currentPlayer;
       moveHistory.push({ x, y, player: currentPlayer });
 
+      // ========================================
+      // 研究用ログ出力
+      // ========================================
+      const moveNum = moveHistory.length;
+      const playerName = currentPlayer === BLACK ? '黒(BLACK)' : '白(WHITE)';
+      const coord = String.fromCharCode(65 + x) + (15 - y); // A1〜O15形式
+      const isHuman = (gameMode === 'pvp') || 
+                      (gameMode === 'ai' && currentPlayer === humanPlayer);
+      const mover = isHuman ? 'Human' : 'AI';
+      
+      let logMessage = '[手番 ' + moveNum + '] ' + playerName + ' ' + mover + ': ' + coord + ' (' + x + ',' + y + ')';
+      if (!isHuman && aiReason) {
+        logMessage += ' 【理由: ' + aiReason + '】';
+      }
+      
+      console.log(
+        '%c' + logMessage,
+        'color: ' + (currentPlayer === BLACK ? '#333' : '#666') + '; font-weight: bold;'
+      );
+
       if (checkWin(x, y, currentPlayer)) {
         gameOver = true;
         winner = currentPlayer;
+        console.log('%c=== ゲーム終了: ' + playerName + ' の勝利 ===', 'color: #d33; font-weight: bold; font-size: 14px;');
+        console.log('棋譜:', moveHistory.map((m, i) => {
+          const p = m.player === BLACK ? 'B' : 'W';
+          const c = String.fromCharCode(65 + m.x) + (15 - m.y);
+          return (i + 1) + '.' + p + c;
+        }).join(' '));
         render();
-        updateStatus();  // 勝利メッセージを表示
+        updateStatus();
         if (currentPlayer === BLACK) scores.black++;
         else scores.white++;
         updateScores();
@@ -1368,6 +1420,7 @@
       if (checkDraw()) {
         gameOver = true;
         winner = null;
+        console.log('%c=== ゲーム終了: 引き分け ===', 'color: #999; font-weight: bold; font-size: 14px;');
         render();
         updateStatus();
         return true;
@@ -1691,7 +1744,7 @@
       
       isAiThinking = false;
       if (move && !gameOver) {
-        makeMove(move.x, move.y);
+        makeMove(move.x, move.y, move.reason);
       }
     }
 
@@ -1742,7 +1795,7 @@
       isAiThinking = false;
 
       if (move && !gameOver && battleRunning && !battlePaused) {
-        makeMove(move.x, move.y);
+        makeMove(move.x, move.y, move.reason);
 
         if (!gameOver && battleRunning && !battlePaused) {
           const speed = parseInt(document.getElementById('battleSpeed').value);
