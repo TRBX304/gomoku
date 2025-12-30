@@ -1355,7 +1355,7 @@
       console.log('%c新規ゲーム開始', 'color: #06c; font-weight: bold; font-size: 14px;');
       console.log('モード:', modeNames[gameMode] || gameMode);
       if (gameMode === 'ai') {
-        console.log('AIレベル:', levelNames[selectedLevel] || selectedLevel);
+        console.log('AIレベル:', levelNames[aiLevel] || aiLevel);
         console.log('プレイヤー:', humanPlayer === BLACK ? '先手(黒)' : '後手(白)');
       } else if (gameMode === 'aivai') {
         console.log('黒AI:', levelNames[blackAiLevel] || blackAiLevel);
