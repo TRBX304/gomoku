@@ -106,6 +106,27 @@
       background: #4299e1;
     }
 
+    .turn-btn {
+      padding: 8px 16px;
+      border: 2px solid #4a5568;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+
+    .turn-btn:hover {
+      transform: scale(1.05);
+    }
+
+    .turn-btn.active {
+      border-color: #f59e0b;
+      background: #f59e0b;
+    }
+
     .level-btn.ultimate {
       border-color: #a855f7;
       background: rgba(168, 85, 247, 0.2);
@@ -289,6 +310,18 @@
       align-items: center;
       justify-content: center;
       text-align: center;
+      transition: all 0.3s;
+    }
+
+    .status.winner {
+      background: #22c55e;
+      font-weight: bold;
+      animation: winPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes winPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
     }
 
     .worker-status {
@@ -442,6 +475,11 @@
 
   <!-- AI対戦用セレクター -->
   <div class="ai-selector" id="aiSelector">
+    <div class="ai-row">
+      <span class="ai-row-label">あなた:</span>
+      <button class="turn-btn active" data-turn="black">⚫ 先手</button>
+      <button class="turn-btn" data-turn="white">⚪ 後手</button>
+    </div>
     <div class="ai-row">
       <span class="ai-row-label">レベル:</span>
       <button class="level-btn active" data-level="1">Lv.1</button>
@@ -1029,10 +1067,12 @@
     let moveHistory = [];
     let scores = { black: 0, white: 0 };
     let gameMode = 'pvp';
+    let winner = null;  // 勝者を記録
     
     // AI設定（プレイヤー vs AI）
     let aiLevel = 1;
     let aiPersonality = 'aggressive';
+    let humanPlayer = BLACK;  // プレイヤーの色（先手/後手）
     
     // AI同士対戦設定
     let blackAi = { level: 1, personality: 'aggressive' };
@@ -1203,10 +1243,16 @@
       board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(EMPTY));
       currentPlayer = BLACK;
       gameOver = false;
+      winner = null;
       moveHistory = [];
       isAiThinking = false;
       updateStatus();
       render();
+      
+      // AI対戦で後手（白）を選んだ場合、AIが先に打つ
+      if (gameMode === 'ai' && humanPlayer === WHITE) {
+        triggerAiMove();
+      }
     }
 
     function isValidMove(x, y) {
@@ -1221,14 +1267,18 @@
 
       if (checkWin(x, y, currentPlayer)) {
         gameOver = true;
+        winner = currentPlayer;
         render();
+        updateStatus();  // 勝利メッセージを表示
         showWinner(currentPlayer);
         return true;
       }
 
       if (checkDraw()) {
         gameOver = true;
+        winner = null;
         render();
+        updateStatus();
         showDraw();
         return true;
       }
@@ -1237,7 +1287,8 @@
       updateStatus();
       render();
 
-      if (gameMode === 'ai' && currentPlayer === WHITE && !gameOver) {
+      // AI対戦：AIの番なら手を打つ
+      if (gameMode === 'ai' && currentPlayer !== humanPlayer && !gameOver) {
         triggerAiMove();
       }
 
@@ -1538,7 +1589,9 @@
       isAiThinking = true;
       updateStatus();
 
-      const move = await calculateAiMove(aiLevel, aiPersonality, WHITE);
+      // AIは人間の反対の色
+      const aiPlayer = humanPlayer === BLACK ? WHITE : BLACK;
+      const move = await calculateAiMove(aiLevel, aiPersonality, aiPlayer);
       
       isAiThinking = false;
       if (move && !gameOver) {
@@ -1613,8 +1666,16 @@
 
     function updateStatus() {
       const status = document.getElementById('status');
+      status.classList.remove('winner');
+      
       if (gameOver) {
-        status.textContent = 'ゲーム終了';
+        if (winner !== null) {
+          status.classList.add('winner');
+          const winnerName = winner === BLACK ? '⚫ 黒' : '⚪ 白';
+          status.textContent = `${winnerName} の勝利！`;
+        } else {
+          status.textContent = '引き分け！';
+        }
       } else if (isAiThinking) {
         if (gameMode === 'aivai') {
           const ai = currentPlayer === BLACK ? blackAi : whiteAi;
@@ -1630,7 +1691,7 @@
           const name = getAiDisplayName(ai.level, ai.personality);
           status.textContent = `${currentPlayer === BLACK ? '⚫' : '⚪'} ${name} の番`;
         } else {
-          status.textContent = currentPlayer === BLACK ? '黒の番です' : '白の番です';
+          status.textContent = currentPlayer === BLACK ? '⚫ 黒の番です' : '⚪ 白の番です';
         }
       }
     }
@@ -1701,7 +1762,7 @@
 
     canvas.addEventListener('click', (e) => {
       if (gameOver || isAiThinking) return;
-      if (gameMode === 'ai' && currentPlayer === WHITE) return;
+      if (gameMode === 'ai' && currentPlayer !== humanPlayer) return;
       if (gameMode === 'aivai') return;
 
       const pos = getGridPosition(e.clientX, e.clientY);
@@ -1710,7 +1771,7 @@
 
     canvas.addEventListener('touchend', (e) => {
       if (gameOver || isAiThinking) return;
-      if (gameMode === 'ai' && currentPlayer === WHITE) return;
+      if (gameMode === 'ai' && currentPlayer !== humanPlayer) return;
       if (gameMode === 'aivai') return;
 
       e.preventDefault();
@@ -1732,6 +1793,16 @@
         document.getElementById('workerStatus').style.display = gameMode === 'pvp' ? 'none' : 'flex';
         
         stopBattle();
+        initBoard();
+      });
+    });
+
+    // Turn buttons (先手/後手)
+    document.querySelectorAll('.turn-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.turn-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        humanPlayer = btn.dataset.turn === 'black' ? BLACK : WHITE;
         initBoard();
       });
     });
