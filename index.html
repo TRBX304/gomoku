@@ -513,113 +513,22 @@
     // ========================================
     // Worker Code
     // ========================================
+    // Worker Code - 詰み保証型AI
+    // 「詰み筋だけを深く読む」選択的深度探索
+    // ========================================
     const workerCode = `
       const BOARD_SIZE = 15;
       const EMPTY = 0;
       const BLACK = 1;
       const WHITE = -1;
-
       const DIRECTIONS = [[1, 0], [0, 1], [1, 1], [1, -1]];
-
-      const PATTERN_SCORES = {
-        FIVE: 10000000,
-        OPEN_FOUR: 500000,
-        FOUR: 50000,
-        OPEN_THREE: 10000,
-        THREE: 1000,
-        OPEN_TWO: 500,
-        TWO: 100
-      };
-
-      const PATTERN_DICT = {
-        // ===== 五連（勝ち） =====
-        'XXXXX': 10000000,
-        
-        // ===== 開放四（次で勝ち確定） =====
-        '_XXXX_': 5000000,
-        
-        // ===== 四（片側閉じ） =====
-        'XXXX_': 500000,
-        '_XXXX': 500000,
-        'OXXXX_': 500000,
-        '_XXXXO': 500000,
-        
-        // ===== 飛び四（非常に危険） =====
-        'XXX_X': 450000,
-        'X_XXX': 450000,
-        'XX_XX': 450000,
-        '_XXX_X_': 400000,
-        '_X_XXX_': 400000,
-        '_XX_XX_': 400000,
-        
-        // ===== 開放三（両側空き） =====
-        '_XXX_': 50000,
-        '__XXX__': 50000,
-        '_XXX__': 45000,
-        '__XXX_': 45000,
-        
-        // ===== 飛び三（開放・危険） =====
-        '_XX_X_': 40000,
-        '_X_XX_': 40000,
-        '_X_X_X_': 35000,
-        '__XX_X_': 30000,
-        '_X_XX__': 30000,
-        
-        // ===== 片三 =====
-        'XXX__': 8000,
-        '__XXX': 8000,
-        'OXXX__': 8000,
-        '__XXXO': 8000,
-        'OXXX_': 7000,
-        '_XXXO': 7000,
-        
-        // ===== 飛び三（片側閉じ） =====
-        'XX__X': 6000,
-        'X__XX': 6000,
-        'XX_X_': 6000,
-        '_X_XX': 6000,
-        'X_X_X': 5500,
-        'OXX_X_': 5000,
-        '_X_XXO': 5000,
-        'OX_XX_': 5000,
-        '_XX_XO': 5000,
-        
-        // ===== 開放二 =====
-        '_XX_': 3000,
-        '__XX__': 3500,
-        '_XX__': 2500,
-        '__XX_': 2500,
-        '___XX___': 3000,
-        
-        // ===== 飛び二 =====
-        '_X_X_': 2500,
-        '__X_X__': 2800,
-        'X__X': 1500,
-        '_X__X_': 2000,
-        'X___X': 1000,
-        
-        // ===== 片二 =====
-        'XX___': 500,
-        '___XX': 500,
-        'OXX___': 500,
-        '___XXO': 500,
-        'OXX__': 400,
-        '__XXO': 400,
-        
-        // ===== 単石（発展性） =====
-        '__X__': 100,
-        '_X_': 50,
-      };
-
-      // 性格による攻撃・防御係数
-      const PERSONALITY = {
-        aggressive: { attack: 1.3, defense: 0.8 },
-        defensive:  { attack: 0.8, defense: 1.4 },
-        balanced:   { attack: 1.0, defense: 1.0 }
-      };
 
       let board = [];
 
+      // ========================================
+      // 基本判定関数
+      // ========================================
+      
       function checkWin(x, y, player) {
         for (const [dx, dy] of DIRECTIONS) {
           let count = 1;
@@ -640,348 +549,591 @@
         return false;
       }
 
-      function lineToPattern(line, player) {
-        let pattern = '';
-        for (const cell of line) {
-          if (cell === player) pattern += 'X';
-          else if (cell === EMPTY) pattern += '_';
-          else pattern += 'O';
-        }
-        return pattern;
-      }
-
-      function evaluateLinePatterns(startX, startY, dx, dy, player) {
-        let score = 0;
+      // ========================================
+      // ライン解析（防御点の完全列挙用）
+      // ========================================
+      
+      function getLineInfo(x, y, dx, dy, player) {
         const line = [];
-        let x = startX, y = startY;
-        while (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
-          line.push(board[y][x]);
-          x += dx;
-          y += dy;
-        }
-        for (let i = 0; i <= line.length - 5; i++) {
-          const window5 = line.slice(i, i + 5);
-          const pattern5 = lineToPattern(window5, player);
-          if (!pattern5.includes('O')) {
-            for (const [pat, val] of Object.entries(PATTERN_DICT)) {
-              if (pattern5.includes(pat) || pat.includes(pattern5)) {
-                score += val;
-              }
-            }
+        for (let i = -4; i <= 4; i++) {
+          const nx = x + dx * i, ny = y + dy * i;
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+            line.push({ i, x: nx, y: ny, cell: 'wall' });
+          } else {
+            const cell = board[ny][nx];
+            line.push({ 
+              i, x: nx, y: ny, 
+              cell: cell === player ? 'mine' : cell === EMPTY ? 'empty' : 'enemy'
+            });
           }
         }
-        return score;
+        return line;
       }
 
-      function evaluateBoard(player, personality) {
-        let score = 0;
-        const enemy = -player;
-        const p = PERSONALITY[personality];
+      // ========================================
+      // 形状判定（石が置かれている状態で呼ぶ）
+      // ========================================
+      
+      function analyzePosition(x, y, player) {
+        const result = {
+          isFive: false,
+          fours: [],      // { direction, defensePoints }
+          openFours: [],  // 防御不能
+          openThrees: [], // { direction, defensePoints }
+        };
         
-        // ===== ライン評価 =====
-        // 横
-        for (let y = 0; y < BOARD_SIZE; y++) {
-          score += evaluateLinePatterns(0, y, 1, 0, player) * p.attack;
-          score -= evaluateLinePatterns(0, y, 1, 0, enemy) * p.defense * 1.1;
-        }
-        // 縦
-        for (let x = 0; x < BOARD_SIZE; x++) {
-          score += evaluateLinePatterns(x, 0, 0, 1, player) * p.attack;
-          score -= evaluateLinePatterns(x, 0, 0, 1, enemy) * p.defense * 1.1;
-        }
-        // 斜め（右下がり）
-        for (let x = 0; x < BOARD_SIZE; x++) {
-          score += evaluateLinePatterns(x, 0, 1, 1, player) * p.attack;
-          score -= evaluateLinePatterns(x, 0, 1, 1, enemy) * p.defense * 1.1;
-        }
-        for (let y = 1; y < BOARD_SIZE; y++) {
-          score += evaluateLinePatterns(0, y, 1, 1, player) * p.attack;
-          score -= evaluateLinePatterns(0, y, 1, 1, enemy) * p.defense * 1.1;
-        }
-        // 斜め（右上がり）
-        for (let x = 0; x < BOARD_SIZE; x++) {
-          score += evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, player) * p.attack;
-          score -= evaluateLinePatterns(x, BOARD_SIZE - 1, 1, -1, enemy) * p.defense * 1.1;
-        }
-        for (let y = 0; y < BOARD_SIZE - 1; y++) {
-          score += evaluateLinePatterns(0, y, 1, -1, player) * p.attack;
-          score -= evaluateLinePatterns(0, y, 1, -1, enemy) * p.defense * 1.1;
-        }
-        
-        // ===== 中央制圧ボーナス（強化） =====
-        for (let y = 4; y <= 10; y++) {
-          for (let x = 4; x <= 10; x++) {
-            if (board[y][x] === player) {
-              const centerDist = Math.abs(x - 7) + Math.abs(y - 7);
-              score += (7 - centerDist) * 80 + 150;
-            } else if (board[y][x] === enemy) {
-              const centerDist = Math.abs(x - 7) + Math.abs(y - 7);
-              score -= (7 - centerDist) * 60 + 100;
-            }
-          }
-        }
-        
-        // ===== 石の連結ボーナス =====
-        for (let y = 0; y < BOARD_SIZE; y++) {
-          for (let x = 0; x < BOARD_SIZE; x++) {
-            if (board[y][x] === player) {
-              let connections = 0;
-              for (const [dx, dy] of DIRECTIONS) {
-                const nx = x + dx, ny = y + dy;
-                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
-                  if (board[ny][nx] === player) connections++;
-                }
-                const nx2 = x - dx, ny2 = y - dy;
-                if (nx2 >= 0 && nx2 < BOARD_SIZE && ny2 >= 0 && ny2 < BOARD_SIZE) {
-                  if (board[ny2][nx2] === player) connections++;
-                }
+        for (let dirIdx = 0; dirIdx < DIRECTIONS.length; dirIdx++) {
+          const [dx, dy] = DIRECTIONS[dirIdx];
+          const line = getLineInfo(x, y, dx, dy, player);
+          
+          // 5連続の窓をスライド
+          for (let start = 0; start <= 4; start++) {
+            const window = line.slice(start, start + 5);
+            if (window.length < 5) continue;
+            
+            let mineCount = 0;
+            let emptyCount = 0;
+            let emptyPositions = [];
+            let hasBlocker = false;
+            
+            for (const cell of window) {
+              if (cell.cell === 'mine') mineCount++;
+              else if (cell.cell === 'empty') {
+                emptyCount++;
+                emptyPositions.push({ x: cell.x, y: cell.y });
               }
-              score += connections * 40;
+              else hasBlocker = true;
+            }
+            
+            if (mineCount === 5) {
+              result.isFive = true;
+            }
+            
+            if (mineCount === 4 && emptyCount === 1 && !hasBlocker) {
+              const beforeIdx = start - 1;
+              const afterIdx = start + 5;
+              const before = line[beforeIdx];
+              const after = line[afterIdx];
+              const openBefore = before && before.cell === 'empty';
+              const openAfter = after && after.cell === 'empty';
+              
+              if (openBefore && openAfter) {
+                result.openFours.push({ direction: dirIdx });
+              } else {
+                result.fours.push({
+                  direction: dirIdx,
+                  defensePoints: emptyPositions.filter(p => 
+                    p.x >= 0 && p.x < BOARD_SIZE && p.y >= 0 && p.y < BOARD_SIZE
+                  )
+                });
+              }
+            }
+          }
+          
+          // 開放三チェック（6マス窓）
+          for (let start = 0; start <= 3; start++) {
+            const window = line.slice(start, start + 6);
+            if (window.length < 6) continue;
+            
+            if (window[0].cell !== 'empty' || window[5].cell !== 'empty') continue;
+            
+            const middle = window.slice(1, 5);
+            let mineCount = 0;
+            let emptyCount = 0;
+            let emptyPositions = [];
+            let hasBlocker = false;
+            
+            for (const cell of middle) {
+              if (cell.cell === 'mine') mineCount++;
+              else if (cell.cell === 'empty') {
+                emptyCount++;
+                emptyPositions.push({ x: cell.x, y: cell.y });
+              }
+              else hasBlocker = true;
+            }
+            
+            if (mineCount === 3 && emptyCount === 1 && !hasBlocker) {
+              const defPoints = [
+                { x: window[0].x, y: window[0].y },
+                { x: window[5].x, y: window[5].y },
+                ...emptyPositions
+              ].filter(p => p.x >= 0 && p.x < BOARD_SIZE && p.y >= 0 && p.y < BOARD_SIZE);
+              
+              result.openThrees.push({
+                direction: dirIdx,
+                defensePoints: defPoints
+              });
             }
           }
         }
         
-        // ===== 発展性ボーナス（空きマスへの接続） =====
+        return result;
+      }
+
+      // ========================================
+      // 真の双三判定（偽双三を排除）
+      // ========================================
+      
+      function isRealDoubleThree(analysis) {
+        if (analysis.openThrees.length < 2) return false;
+        
+        for (let i = 0; i < analysis.openThrees.length; i++) {
+          for (let j = i + 1; j < analysis.openThrees.length; j++) {
+            const t1 = analysis.openThrees[i];
+            const t2 = analysis.openThrees[j];
+            
+            if (t1.direction === t2.direction) continue;
+            
+            const def1 = new Set(t1.defensePoints.map(p => p.x + ',' + p.y));
+            const def2 = new Set(t2.defensePoints.map(p => p.x + ',' + p.y));
+            
+            let hasCommon = false;
+            for (const d of def1) {
+              if (def2.has(d)) { hasCommon = true; break; }
+            }
+            
+            if (!hasCommon) return true;
+          }
+        }
+        
+        return false;
+      }
+
+      // ========================================
+      // 即勝ち判定
+      // ========================================
+      
+      function checkImmediateWin(x, y, player) {
+        board[y][x] = player;
+        const analysis = analyzePosition(x, y, player);
+        board[y][x] = EMPTY;
+        
+        if (analysis.isFive) return { win: true, type: 'five' };
+        if (analysis.openFours.length > 0) return { win: true, type: 'openFour' };
+        
+        const fourDirections = new Set(analysis.fours.map(f => f.direction));
+        if (fourDirections.size >= 2) return { win: true, type: 'doubleFour' };
+        
+        if (analysis.fours.length > 0 && analysis.openThrees.length > 0) {
+          for (const four of analysis.fours) {
+            for (const three of analysis.openThrees) {
+              if (four.direction !== three.direction) {
+                return { win: true, type: 'fourThree' };
+              }
+            }
+          }
+        }
+        
+        board[y][x] = player;
+        const isReal = isRealDoubleThree(analyzePosition(x, y, player));
+        board[y][x] = EMPTY;
+        if (isReal) return { win: true, type: 'doubleThree' };
+        
+        return { win: false };
+      }
+
+      // ========================================
+      // 候補手生成
+      // ========================================
+      
+      function generateCandidatesInternal() {
+        const candidateMap = new Map();
         for (let y = 0; y < BOARD_SIZE; y++) {
           for (let x = 0; x < BOARD_SIZE; x++) {
-            if (board[y][x] === player) {
-              let openSpaces = 0;
-              for (const [dx, dy] of DIRECTIONS) {
-                for (const dir of [1, -1]) {
-                  const nx = x + dx * dir, ny = y + dy * dir;
-                  if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
-                    if (board[ny][nx] === EMPTY) openSpaces++;
+            if (board[y][x] !== EMPTY) {
+              for (let dy = -2; dy <= 2; dy++) {
+                for (let dx = -2; dx <= 2; dx++) {
+                  const ny = y + dy, nx = x + dx;
+                  if (ny >= 0 && ny < BOARD_SIZE && nx >= 0 && nx < BOARD_SIZE && board[ny][nx] === EMPTY) {
+                    candidateMap.set(nx + ',' + ny, { x: nx, y: ny });
                   }
                 }
               }
-              score += openSpaces * 15;
             }
           }
         }
-        
-        return score;
+        return Array.from(candidateMap.values());
       }
 
-      function analyzeLinePattern(x, y, dx, dy, player) {
-        let count = 1;
-        let openEnds = 0;
-        for (let i = 1; i <= 5; i++) {
-          const nx = x + dx * i, ny = y + dy * i;
-          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
-          const cell = board[ny][nx];
-          if (cell === player) count++;
-          else if (cell === EMPTY) { openEnds++; break; }
-          else break;
-        }
-        for (let i = 1; i <= 5; i++) {
-          const nx = x - dx * i, ny = y - dy * i;
-          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
-          const cell = board[ny][nx];
-          if (cell === player) count++;
-          else if (cell === EMPTY) { openEnds++; break; }
-          else break;
-        }
-        return { count: Math.min(count, 5), openEnds };
-      }
-
-      function analyzeThreats(x, y, player) {
-        const threats = { five: 0, openFour: 0, four: 0, openThree: 0, three: 0 };
+      // ========================================
+      // 【選択的深度探索】詰み筋だけを深く読む
+      // 
+      // ・強制手（四・開放四・真双三）のみ深度延長
+      // ・通常手は即座に枝刈り
+      // ・「四→防御→四」が続く限り自動延長
+      // ・visited に手番(player)を含める
+      // ========================================
+      
+      // 強制手かどうかを判定し、防御点を返す
+      function classifyMove(x, y, player) {
         board[y][x] = player;
-        for (const [dx, dy] of DIRECTIONS) {
-          const result = analyzeLinePattern(x, y, dx, dy, player);
-          if (result.count >= 5) threats.five++;
-          else if (result.count === 4 && result.openEnds === 2) threats.openFour++;
-          else if (result.count === 4 && result.openEnds === 1) threats.four++;
-          else if (result.count === 3 && result.openEnds === 2) threats.openThree++;
-          else if (result.count === 3 && result.openEnds === 1) threats.three++;
-        }
-        board[y][x] = EMPTY;
-        return threats;
-      }
-
-      function quickEvaluate(x, y, player) {
-        let score = 0;
-        const enemy = -player;
-        const myThreats = analyzeThreats(x, y, player);
-        const enemyThreats = analyzeThreats(x, y, enemy);
+        const analysis = analyzePosition(x, y, player);
         
-        // ===== 即勝ち =====
-        if (myThreats.five > 0) return 100000000;
-        
-        // ===== 相手の即勝ちを防ぐ =====
-        if (enemyThreats.five > 0) return 95000000;
-        
-        // ===== 開放四（ほぼ勝ち確定） =====
-        if (myThreats.openFour > 0) return 90000000;
-        
-        // ===== 相手の開放四を防ぐ =====
-        if (enemyThreats.openFour > 0) return 85000000;
-        
-        // ===== 四三コンボ（勝ち確定） =====
-        if (myThreats.four > 0 && myThreats.openThree > 0) return 80000000;
-        
-        // ===== 双四（勝ち確定） =====
-        if (myThreats.four >= 2) return 75000000;
-        
-        // ===== 相手の四三を防ぐ =====
-        if (enemyThreats.four > 0 && enemyThreats.openThree > 0) return 70000000;
-        
-        // ===== 相手の双四を防ぐ =====
-        if (enemyThreats.four >= 2) return 65000000;
-        
-        // ===== 双三（強力な攻め） =====
-        if (myThreats.openThree >= 2) return 60000000;
-        
-        // ===== 相手の双三を防ぐ =====
-        if (enemyThreats.openThree >= 2) return 55000000;
-        
-        // ===== 四＋三（準コンボ） =====
-        if (myThreats.four > 0 && myThreats.three > 0) score += 3000000;
-        if (enemyThreats.four > 0 && enemyThreats.three > 0) score += 2500000;
-        
-        // ===== 通常の脅威評価 =====
-        if (myThreats.four > 0) score += 500000;
-        if (myThreats.openThree > 0) score += 50000;
-        if (myThreats.three > 0) score += 5000;
-        
-        if (enemyThreats.four > 0) score += 450000;
-        if (enemyThreats.openThree > 0) score += 45000;
-        if (enemyThreats.three > 0) score += 4500;
-        
-        // ===== 中央制圧ボーナス =====
-        const dist = Math.abs(x - 7) + Math.abs(y - 7);
-        score += (14 - dist) * 100;
-        
-        // ===== 隣接ボーナス（石の連結性） =====
-        for (const [dx, dy] of DIRECTIONS) {
-          for (const dir of [1, -1]) {
-            const nx = x + dx * dir, ny = y + dy * dir;
-            if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
-              if (board[ny][nx] === player) score += 200;
-              else if (board[ny][nx] === enemy) score += 150;
-            }
-          }
-        }
-        
-        return score;
-      }
-
-      function alphaBeta(depth, alpha, beta, isMaximizing, aiPlayer, personality, candidates) {
-        if (depth === 0) {
-          return { score: evaluateBoard(aiPlayer, personality), move: null };
-        }
-
-        const currentPlayer = isMaximizing ? aiPlayer : -aiPlayer;
-
-        for (const { x, y } of candidates) {
-          board[y][x] = currentPlayer;
-          const win = checkWin(x, y, currentPlayer);
+        // 即勝ちは最優先
+        if (analysis.isFive) {
           board[y][x] = EMPTY;
-          if (win) {
-            const winScore = PATTERN_SCORES.FIVE * (depth + 1);
-            return { score: isMaximizing ? winScore : -winScore, move: { x, y } };
-          }
+          return { type: 'win', defensePoints: [] };
         }
-
-        let bestMove = candidates[0];
-
-        if (isMaximizing) {
-          let maxScore = -Infinity;
-          for (const { x, y } of candidates) {
-            board[y][x] = currentPlayer;
-            const childCandidates = generateChildCandidates(x, y, candidates, aiPlayer);
-            const result = alphaBeta(depth - 1, alpha, beta, false, aiPlayer, personality, childCandidates);
-            board[y][x] = EMPTY;
-            if (result.score > maxScore) {
-              maxScore = result.score;
-              bestMove = { x, y };
-            }
-            alpha = Math.max(alpha, result.score);
-            if (beta <= alpha) break;
-          }
-          return { score: maxScore, move: bestMove };
-        } else {
-          let minScore = Infinity;
-          for (const { x, y } of candidates) {
-            board[y][x] = currentPlayer;
-            const childCandidates = generateChildCandidates(x, y, candidates, aiPlayer);
-            const result = alphaBeta(depth - 1, alpha, beta, true, aiPlayer, personality, childCandidates);
-            board[y][x] = EMPTY;
-            if (result.score < minScore) {
-              minScore = result.score;
-              bestMove = { x, y };
-            }
-            beta = Math.min(beta, result.score);
-            if (beta <= alpha) break;
-          }
-          return { score: minScore, move: bestMove };
+        
+        // 開放四（防御不能）
+        if (analysis.openFours.length > 0) {
+          board[y][x] = EMPTY;
+          return { type: 'win', defensePoints: [] };
         }
-      }
-
-      function generateChildCandidates(lastX, lastY, parentCandidates, aiPlayer) {
-        const candidateSet = new Set();
-        const newCandidates = [];
-
-        for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            const ny = lastY + dy, nx = lastX + dx;
-            if (ny >= 0 && ny < BOARD_SIZE && nx >= 0 && nx < BOARD_SIZE && board[ny][nx] === EMPTY) {
-              const key = nx + ',' + ny;
-              if (!candidateSet.has(key)) {
-                candidateSet.add(key);
-                newCandidates.push({ x: nx, y: ny, priority: quickEvaluate(nx, ny, aiPlayer) });
+        
+        // 双四（防御不能）
+        const fourDirections = new Set(analysis.fours.map(f => f.direction));
+        if (fourDirections.size >= 2) {
+          board[y][x] = EMPTY;
+          return { type: 'win', defensePoints: [] };
+        }
+        
+        // 四三（防御不能）
+        if (analysis.fours.length > 0 && analysis.openThrees.length > 0) {
+          for (const four of analysis.fours) {
+            for (const three of analysis.openThrees) {
+              if (four.direction !== three.direction) {
+                board[y][x] = EMPTY;
+                return { type: 'win', defensePoints: [] };
               }
             }
           }
         }
+        
+        // 真の双三（防御点を返す）
+        if (isRealDoubleThree(analysis)) {
+          const allDef = new Set();
+          for (const three of analysis.openThrees) {
+            three.defensePoints.forEach(p => allDef.add(p.x + ',' + p.y));
+          }
+          board[y][x] = EMPTY;
+          return {
+            type: 'forcing_doubleThree',
+            defensePoints: [...allDef].map(s => {
+              const [px, py] = s.split(',').map(Number);
+              return { x: px, y: py };
+            })
+          };
+        }
+        
+        // 四（強制手、防御点を返す）
+        if (analysis.fours.length > 0) {
+          const allDef = new Set();
+          for (const four of analysis.fours) {
+            four.defensePoints.forEach(p => allDef.add(p.x + ',' + p.y));
+          }
+          board[y][x] = EMPTY;
+          return {
+            type: 'forcing_four',
+            defensePoints: [...allDef].map(s => {
+              const [px, py] = s.split(',').map(Number);
+              return { x: px, y: py };
+            })
+          };
+        }
+        
+        board[y][x] = EMPTY;
+        return { type: 'normal', defensePoints: [] };
+      }
 
-        for (const c of parentCandidates) {
-          if (board[c.y][c.x] === EMPTY) {
-            const key = c.x + ',' + c.y;
-            if (!candidateSet.has(key)) {
-              candidateSet.add(key);
-              newCandidates.push(c);
-            }
+      // ========================================
+      // 【核心】選択的深度の強制勝利探索
+      // 
+      // maxForcingMoves: 強制手が何回続けられるか
+      // 強制手のみを辿り、通常手は探索しない
+      // ========================================
+      
+      function findForcedWinSelective(player, candidates, maxForcingMoves, visited) {
+        if (maxForcingMoves <= 0) return null;
+        const enemy = -player;
+        
+        // 【改善6】visited に手番を含める
+        const boardHash = player + ':' + board.flat().join('');
+        if (visited.has(boardHash)) return null;
+        visited.add(boardHash);
+
+        // 強制手のみを抽出してソート
+        const forcingMoves = [];
+        
+        for (const { x, y } of candidates) {
+          const classification = classifyMove(x, y, player);
+          
+          if (classification.type === 'win') {
+            // 即勝ち発見
+            return { x, y, type: 'immediate_win' };
+          }
+          
+          if (classification.type === 'forcing_four' || classification.type === 'forcing_doubleThree') {
+            forcingMoves.push({
+              x, y,
+              type: classification.type,
+              defensePoints: classification.defensePoints
+            });
           }
         }
 
-        newCandidates.sort((a, b) => b.priority - a.priority);
-        return newCandidates.slice(0, 12);
+        // 強制手を探索（四を優先）
+        forcingMoves.sort((a, b) => {
+          if (a.type === 'forcing_four' && b.type !== 'forcing_four') return -1;
+          if (a.type !== 'forcing_four' && b.type === 'forcing_four') return 1;
+          return a.defensePoints.length - b.defensePoints.length;
+        });
+
+        for (const move of forcingMoves) {
+          board[move.y][move.x] = player;
+          
+          // 【改善4】防御手は最小集合のみ、各防御に対して確認
+          let canWinAfterAllDefenses = true;
+          
+          for (const def of move.defensePoints) {
+            board[def.y][def.x] = enemy;
+            
+            const nextCandidates = generateCandidatesInternal();
+            
+            // 【選択的深度】強制手が続くなら深度を自動延長
+            const nextWin = findForcedWinSelective(
+              player, 
+              nextCandidates, 
+              maxForcingMoves - 1,  // 強制手1回消費
+              visited
+            );
+            
+            board[def.y][def.x] = EMPTY;
+            
+            if (!nextWin) {
+              canWinAfterAllDefenses = false;
+              break;
+            }
+          }
+          
+          board[move.y][move.x] = EMPTY;
+          
+          if (canWinAfterAllDefenses && move.defensePoints.length > 0) {
+            return { x: move.x, y: move.y, type: move.type };
+          }
+        }
+
+        return null;
       }
 
+      // ========================================
+      // 【改善5】fallback探索（負けを最も遅らせる手）
+      // 相手の強制勝利が何手遅れるかで評価
+      // 評価関数は使用しない
+      // ========================================
+      
+      function findBestFallbackMove(player, candidates) {
+        const enemy = -player;
+        let bestMove = candidates[0];
+        let bestDelayScore = -Infinity;
+        
+        for (const { x, y } of candidates) {
+          board[y][x] = player;
+          
+          const nextCandidates = generateCandidatesInternal();
+          let delayScore = 0;
+          
+          // 相手が即勝ちできるか
+          let enemyCanWinNow = false;
+          for (const c of nextCandidates) {
+            if (checkImmediateWin(c.x, c.y, enemy).win) {
+              enemyCanWinNow = true;
+              break;
+            }
+          }
+          
+          if (enemyCanWinNow) {
+            delayScore = -10000; // 即負け
+          } else {
+            // 相手の強制勝利を探す（depth=4相当）
+            const enemyWin = findForcedWinSelective(enemy, nextCandidates, 4, new Set());
+            if (enemyWin) {
+              delayScore = -1000; // 強制負け
+            } else {
+              // 自分の強制手があるか
+              const myForcing = findForcedWinSelective(player, nextCandidates, 2, new Set());
+              if (myForcing) {
+                delayScore = 500; // 攻めのチャンス
+              } else {
+                // 自分が四や三を作れるか
+                const classification = classifyMove(x, y, player);
+                if (classification.type === 'forcing_four') {
+                  delayScore = 100;
+                } else if (classification.type === 'forcing_doubleThree') {
+                  delayScore = 50;
+                } else {
+                  delayScore = 0;
+                }
+              }
+            }
+          }
+          
+          board[y][x] = EMPTY;
+          
+          if (delayScore > bestDelayScore) {
+            bestDelayScore = delayScore;
+            bestMove = { x, y };
+          }
+        }
+        
+        return bestMove;
+      }
+
+      // ========================================
+      // Lv1-3用の関数（変更なし）
+      // ========================================
+      
+      function findImmediateWinSimple(player, candidates) {
+        for (const { x, y } of candidates) {
+          if (checkImmediateWin(x, y, player).win) return { x, y };
+        }
+        return null;
+      }
+
+      function findBlockSimple(player, candidates) {
+        const enemy = -player;
+        for (const { x, y } of candidates) {
+          if (checkImmediateWin(x, y, enemy).win) return { x, y };
+        }
+        return null;
+      }
+
+      function findFourMove(player, candidates) {
+        for (const { x, y } of candidates) {
+          board[y][x] = player;
+          const analysis = analyzePosition(x, y, player);
+          board[y][x] = EMPTY;
+          if (analysis.fours.length > 0) return { x, y };
+        }
+        return null;
+      }
+
+      function findOpenThreeMove(player, candidates) {
+        for (const { x, y } of candidates) {
+          board[y][x] = player;
+          const analysis = analyzePosition(x, y, player);
+          board[y][x] = EMPTY;
+          if (analysis.openThrees.length > 0) return { x, y };
+        }
+        return null;
+      }
+
+      function findConnectedMove(player, candidates) {
+        for (const { x, y } of candidates) {
+          for (const [dx, dy] of DIRECTIONS) {
+            for (const dir of [1, -1]) {
+              const nx = x + dx * dir, ny = y + dy * dir;
+              if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                if (board[ny][nx] === player) return { x, y };
+              }
+            }
+          }
+        }
+        return candidates[0] || null;
+      }
+
+      // ========================================
+      // メインロジック
+      // ========================================
+      
       self.onmessage = function(e) {
         const { candidates, boardData, aiPlayer, level, personality, workerId } = e.data;
         
         board = boardData.map(row => [...row]);
+        const enemy = -aiPlayer;
 
-        let bestMove = null;
-        let bestScore = -Infinity;
+        // ========================================
+        // 【最強(Lv4)】詰み保証型AI
+        // 強制手のみを深く読む選択的深度探索
+        // ========================================
+        if (level === 4) {
+          // 【手順1】自分の即勝利（五連）
+          for (const { x, y } of candidates) {
+            board[y][x] = aiPlayer;
+            if (checkWin(x, y, aiPlayer)) {
+              board[y][x] = EMPTY;
+              self.postMessage({ workerId, bestMove: { x, y }, bestScore: 1 });
+              return;
+            }
+            board[y][x] = EMPTY;
+          }
 
-        for (const candidate of candidates) {
-          board[candidate.y][candidate.x] = aiPlayer;
-          
-          const childCandidates = generateChildCandidates(candidate.x, candidate.y, candidates, aiPlayer);
-          
-          const result = alphaBeta(
-            level - 1,
-            -Infinity,
-            Infinity,
-            false,
-            aiPlayer,
-            personality,
-            childCandidates
-          );
-          
-          board[candidate.y][candidate.x] = EMPTY;
+          // 【手順2】自分の強制勝利（詰み）
+          // maxForcingMoves=7: 四→防御→四→防御→四→防御→五 を読む
+          const forcedWin = findForcedWinSelective(aiPlayer, candidates, 7, new Set());
+          if (forcedWin) {
+            self.postMessage({ workerId, bestMove: forcedWin, bestScore: 1 });
+            return;
+          }
 
-          const score = result.score;
-          if (score > bestScore) {
-            bestScore = score;
-            bestMove = { x: candidate.x, y: candidate.y };
+          // 【手順3】相手の即勝利阻止
+          for (const { x, y } of candidates) {
+            if (checkImmediateWin(x, y, enemy).win) {
+              self.postMessage({ workerId, bestMove: { x, y }, bestScore: 1 });
+              return;
+            }
+          }
+
+          // 【手順4】相手の強制勝利阻止
+          // 相手が打ったら強制勝利になる点を探す
+          for (const { x, y } of candidates) {
+            board[y][x] = enemy;
+            const allCandidates = generateCandidatesInternal();
+            const enemyWin = findForcedWinSelective(enemy, allCandidates, 5, new Set());
+            board[y][x] = EMPTY;
+            
+            if (enemyWin) {
+              self.postMessage({ workerId, bestMove: { x, y }, bestScore: 1 });
+              return;
+            }
+          }
+
+          // 【手順5】勝ちも負けも無い場合：最も敗北を遅らせる手
+          const fallbackMove = findBestFallbackMove(aiPlayer, candidates);
+          self.postMessage({ workerId, bestMove: fallbackMove, bestScore: 1 });
+          return;
+        }
+
+        // ========================================
+        // Lv1-3（変更なし）
+        // ========================================
+        
+        const immediateWin = findImmediateWinSimple(aiPlayer, candidates);
+        if (immediateWin) {
+          self.postMessage({ workerId, bestMove: immediateWin, bestScore: 1 });
+          return;
+        }
+
+        const block = findBlockSimple(aiPlayer, candidates);
+        if (block) {
+          self.postMessage({ workerId, bestMove: block, bestScore: 1 });
+          return;
+        }
+
+        if (level === 3) {
+          const forcedWin = findForcedWinSelective(aiPlayer, candidates, 4, new Set());
+          if (forcedWin) {
+            self.postMessage({ workerId, bestMove: forcedWin, bestScore: 1 });
+            return;
           }
         }
 
-        self.postMessage({ workerId, bestMove, bestScore });
+        if (level >= 2) {
+          const fourMove = findFourMove(aiPlayer, candidates);
+          if (fourMove) {
+            self.postMessage({ workerId, bestMove: fourMove, bestScore: 1 });
+            return;
+          }
+          
+          const threeMove = findOpenThreeMove(aiPlayer, candidates);
+          if (threeMove) {
+            self.postMessage({ workerId, bestMove: threeMove, bestScore: 1 });
+            return;
+          }
+        }
+
+        const connectedMove = findConnectedMove(aiPlayer, candidates);
+        self.postMessage({ workerId, bestMove: connectedMove || candidates[0], bestScore: 1 });
       };
     `;
 
@@ -1313,44 +1465,50 @@
     }
 
     function quickEvaluate(x, y) {
-      // 即勝ち/即負けチェック
+      // 強制手順優先：勝ち確定形を高く評価
+      
+      // 即勝ち
       board[y][x] = WHITE;
       if (checkWin(x, y, WHITE)) { board[y][x] = EMPTY; return 100000000; }
       board[y][x] = BLACK;
       if (checkWin(x, y, BLACK)) { board[y][x] = EMPTY; return 95000000; }
       board[y][x] = EMPTY;
 
-      let score = 0;
-      
-      // 脅威分析（両プレイヤー）
       const whiteThreats = analyzeThreatsMain(x, y, WHITE);
       const blackThreats = analyzeThreatsMain(x, y, BLACK);
       
-      // 開放四
-      if (whiteThreats.openFour > 0) score += 5000000;
-      if (blackThreats.openFour > 0) score += 4500000;
+      // 開放四（止められない）
+      if (whiteThreats.openFour > 0) return 90000000;
+      if (blackThreats.openFour > 0) return 85000000;
       
-      // 四三コンボ
-      if (whiteThreats.four > 0 && whiteThreats.openThree > 0) score += 3000000;
-      if (blackThreats.four > 0 && blackThreats.openThree > 0) score += 2800000;
-      
-      // 双四
-      if (whiteThreats.four >= 2) score += 2500000;
-      if (blackThreats.four >= 2) score += 2300000;
+      // 四三・双四（勝ち確定コンボ）
+      if (whiteThreats.four > 0 && whiteThreats.openThree > 0) return 80000000;
+      if (whiteThreats.four >= 2) return 75000000;
+      if (blackThreats.four > 0 && blackThreats.openThree > 0) return 70000000;
+      if (blackThreats.four >= 2) return 65000000;
       
       // 双三
-      if (whiteThreats.openThree >= 2) score += 1500000;
-      if (blackThreats.openThree >= 2) score += 1400000;
-      
-      // 通常の脅威
-      if (whiteThreats.four > 0) score += 500000;
-      if (whiteThreats.openThree > 0) score += 50000;
-      if (blackThreats.four > 0) score += 450000;
-      if (blackThreats.openThree > 0) score += 45000;
+      if (whiteThreats.openThree >= 2) return 60000000;
+      if (blackThreats.openThree >= 2) return 55000000;
 
-      // 中央ボーナス（強化）
-      const dist = Math.abs(x - 7) + Math.abs(y - 7);
-      score += (14 - dist) * 100;
+      // 四
+      if (whiteThreats.four > 0) return 10000;
+      if (blackThreats.four > 0) return 9000;
+      
+      // 開放三
+      if (whiteThreats.openThree > 0) return 5000;
+      if (blackThreats.openThree > 0) return 4500;
+      
+      // 連結性（勝ち筋につながる可能性）
+      let score = 0;
+      for (const [dx, dy] of DIRECTIONS) {
+        for (const dir of [1, -1]) {
+          const nx = x + dx * dir, ny = y + dy * dir;
+          if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+            if (board[ny][nx] !== EMPTY) score += 50;
+          }
+        }
+      }
       
       return score;
     }
